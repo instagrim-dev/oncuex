@@ -18,15 +18,15 @@ Just describe what you want — Enter turns ideas into production-ready code.
 
 ## Project URLs
 
-**Live app:** https://<project-id>-latest.preview.enter.pro  
-**Edit & build in Enter:** https://enter.pro/project/<project-id>
+**Live app:** https://d606ece3407d419a80272571af62bfd2.prod.enter.pro  
+**Edit & build in Enter:** https://enter.pro/project/d606ece3407d419a80272571af62bfd2
 
 
 ---
 
 ## Continue building
 
-Keep developing your app directly in [Enter.pro](https://enter.pro/project/<project-id>).  
+Keep developing your app directly in [Enter.pro](https://enter.pro/project/d606ece3407d419a80272571af62bfd2).  
 Prompt new features, refine the UI, or connect integrations — all changes are versioned and synced automatically to GitHub.
 
 ---
