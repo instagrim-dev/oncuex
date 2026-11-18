@@ -177,6 +177,14 @@ def evaluate(
         statuses[rid] = status
         residuals[rid] = why
 
+    for rid, req in by_id.items():
+        if rid in cycle_paths:
+            continue
+        conflicts = prerequisite_conflicts(req, by_id)
+        if conflicts:
+            statuses[rid] = "blocked"
+            residuals[rid] = conflicts[:1]
+
     integrated = integrated_checks(snapshot, requirements, statuses)
     ready = all(
         statuses[r["id"]] == "supported" for r in requirements if r["blocking"]
@@ -320,6 +328,79 @@ def _cycle_paths(graph: dict[str, list[str]]) -> dict[str, list[str]]:
         if state.get(node, 0) == 0:
             dfs(node)
     return cycles
+
+
+def _constraint(req: dict) -> dict | None:
+    """A prerequisite's declared constraint on one field, when one is stated."""
+    kind = req["predicateType"]
+    expected = req.get("expectedValues", {})
+    if kind == "numeric_within":
+        field = expected.get("field")
+        if not field:
+            return None
+        return {
+            "kind": "numeric",
+            "field": field,
+            "low": expected.get("minimum"),
+            "high": expected.get("maximum", expected.get("maximumMinorUnits")),
+        }
+    if kind == "set_equals":
+        field = expected.get("field")
+        if not field:
+            return None
+        return {"kind": "equals", "field": field, "value": expected.get("value")}
+    if kind == "attestation_reviewed":
+        return {
+            "kind": "equals",
+            "field": expected.get("attestationField", "location.fireAttestation"),
+            "value": "reviewed",
+        }
+    return None
+
+
+def _conflict(a: dict, b: dict) -> dict | None:
+    ca, cb = _constraint(a), _constraint(b)
+    if not ca or not cb or ca["field"] != cb["field"]:
+        return None
+    field = ca["field"]
+    pair = [a["id"], b["id"]]
+    if ca["kind"] == "numeric" and cb["kind"] == "numeric":
+        lows = [c["low"] for c in (ca, cb) if c["low"] is not None]
+        highs = [c["high"] for c in (ca, cb) if c["high"] is not None]
+        if lows and highs and max(lows) > min(highs):
+            return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
+        return None
+    if ca["kind"] == "equals" and cb["kind"] == "equals":
+        if ca["value"] != cb["value"]:
+            return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
+        return None
+    numeric, exact = (ca, cb) if ca["kind"] == "numeric" else (cb, ca)
+    value = exact["value"]
+    if not isinstance(value, int):
+        return None
+    below = numeric["low"] is not None and value < numeric["low"]
+    above = numeric["high"] is not None and value > numeric["high"]
+    if below or above:
+        return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
+    return None
+
+
+def prerequisite_conflicts(req: dict, by_id: dict[str, dict]) -> list[dict]:
+    """Pairs of declared prerequisites that no single value can satisfy.
+
+    Only declared constraints are compared: numeric ranges and exact values on
+    the same field. Time windows constrain when work happens, not what value a
+    field holds, so they are not treated as conflicting.
+    """
+    prerequisites = [by_id[pid] for pid in req["prerequisiteIds"] if pid in by_id]
+    conflicts: list[dict] = []
+    for index, first in enumerate(prerequisites):
+        for second in prerequisites[index + 1:]:
+            conflict = _conflict(first, second)
+            if conflict:
+                conflict["code"] = "prerequisite_conflict"
+                conflicts.append(conflict)
+    return conflicts
 
 
 def dependent_closure(seeds: set[str], requirements: list[dict]) -> set[str]:

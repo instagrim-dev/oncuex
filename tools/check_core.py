@@ -235,13 +235,13 @@ def main() -> int:
     # ------------------------------------------------------------ reload idempotency
     replay_store = Store(project_for(scenario, "baseline", 8),
                          copy.deepcopy(requirements), base_evidence(scenario))
-    decision_command = command("CMD-RL", 8, actor="PM-rowan", decisionId="DEC-RL")
+    decision_command = command("CMD-RL", 8, actor="PM-rowan", decisionId="DEC-9")
     replay_store.record_decision(copy.deepcopy(decision_command))
     restored_store = Store.from_export(replay_store.export())
     sequence_before = restored_store.sequence
     replay_result = restored_store.record_decision(copy.deepcopy(decision_command))
     check("a command replayed after reload returns the stored result",
-          replay_result.get("decisionId") == "DEC-RL", str(replay_result))
+          replay_result.get("decisionId") == "DEC-9", str(replay_result))
     check("a command replayed after reload appends nothing",
           restored_store.sequence == sequence_before, str(restored_store.sequence))
     check("a command replayed after reload keeps one decision",
@@ -418,6 +418,176 @@ def main() -> int:
         check("a cycle fails dependency_closure",
               any(c["id"] == "dependency_closure" for c in assessment["integrated"]["checks"]),
               str([c["id"] for c in assessment["integrated"]["checks"]]))
+
+    # ------------------------------------------------------------ archived evidence
+    archive_store = Store(project_for(scenario, "baseline", 8),
+                          copy.deepcopy(requirements), base_evidence(scenario))
+    archive_store.record_decision(command("CMD-AR1", 8, actor="PM-rowan", decisionId="DEC-8"))
+    trimmed_evidence = [copy.deepcopy(e) for e in evidence if e["id"] != "EV-7"]
+    archive_store.change_requirement_set(
+        command("CMD-AR2", 8), trimmed_requirements, trimmed_evidence)
+    check("withdrawn evidence is archived", len(archive_store.archived_evidence) == 1,
+          str(len(archive_store.archived_evidence)))
+    entry = archive_store.archived_evidence[0]
+    check("the archive keeps the record, its sequence and the reason",
+          entry["evidence"]["id"] == "EV-7"
+          and entry["archivedAtSequence"] == 2
+          and entry["archiveReason"] == "requirement_set_changed"
+          and entry["requirementSetVersion"] == 2,
+          json.dumps({k: v for k, v in entry.items() if k != "evidence"}))
+    check("archived evidence leaves the current set",
+          all(e["id"] != "EV-7" for e in archive_store.evidence))
+    snapshots = archive_store.decision_evidence("DEC-8")
+    check("a historical decision's evidence stays readable",
+          [e["id"] for e in snapshots] == [f"EV-{n}" for n in range(1, 8)],
+          str([e["id"] for e in snapshots]))
+    check("the archived snapshot keeps its content digest",
+          snapshots[-1]["contentDigest"]
+          == next(e for e in evidence if e["id"] == "EV-7")["contentDigest"])
+
+    archive_reload = Store.from_export(archive_store.export())
+    check("the archive survives reload",
+          archive_reload.archived_evidence == archive_store.archived_evidence)
+    check("historical evidence is readable after reload",
+          [e["id"] for e in archive_reload.decision_evidence("DEC-8")]
+          == [f"EV-{n}" for n in range(1, 8)])
+    check("the scope-changed decision stays historical after reload",
+          archive_reload.currentness("DEC-8") == "historical")
+    check("export round-trips with the archive",
+          json.dumps(archive_reload.export(), sort_keys=True)
+          == json.dumps(archive_store.export(), sort_keys=True))
+    try:
+        archive_reload.attach_evidence(
+            command("CMD-AR3", 9), next(e for e in evidence if e["id"] == "EV-7"))
+        check("an archived record cannot be re-attached", False, "accepted")
+    except CommandError as exc:
+        check("an archived record cannot be re-attached", exc.code == "duplicate_evidence",
+              exc.code)
+
+    # ------------------------------------------------------------ export contract
+    exported = archive_store.export()
+    check("the export declares its version", exported["exportVersion"] == "2.0",
+          str(exported.get("exportVersion")))
+    check("decisions serialize the documented evidence field",
+          "evidenceIds" in exported["decisions"][0]
+          and "_evidenceIds" not in exported["decisions"][0])
+    check("the export carries the archive",
+          exported["archivedEvidence"][0]["evidence"]["id"] == "EV-7")
+
+    immutable = Store(project_for(scenario, "baseline", 8),
+                      copy.deepcopy(requirements), base_evidence(scenario))
+    record_before = json.dumps(immutable.export(), sort_keys=True)
+    rewritten = [copy.deepcopy(e) for e in evidence]
+    rewritten[0]["sourceExcerpt"] = "A rewritten record that no source states."
+    try:
+        immutable.change_requirement_set(command("CMD-IM1", 8),
+                                         copy.deepcopy(requirements), rewritten)
+        check("scope change cannot rewrite a retained record", False, "accepted")
+    except CommandError as exc:
+        check("scope change cannot rewrite a retained record",
+              exc.code == "invalid_evidence", exc.code)
+    check("a rejected rewrite leaves the record byte-identical",
+          json.dumps(immutable.export(), sort_keys=True) == record_before)
+
+    try:
+        archive_store.change_requirement_set(
+            command("CMD-IM2", 9), trimmed_requirements,
+            trimmed_evidence + [copy.deepcopy(entry["evidence"])])
+        check("a withdrawn record cannot return through a scope change", False, "accepted")
+    except CommandError as exc:
+        check("a withdrawn record cannot return through a scope change",
+              exc.code == "duplicate_evidence", exc.code)
+
+    def rejects(label: str, mutate) -> None:
+        bad = json.loads(json.dumps(exported))
+        mutate(bad)
+        try:
+            Store.from_export(bad)
+            check(label, False, "import accepted")
+        except CommandError as exc:
+            check(label, exc.code == "invalid_export", exc.code)
+
+    rejects("an import without a version is rejected",
+            lambda e: e.pop("exportVersion"))
+    rejects("an unsupported export version is rejected",
+            lambda e: e.__setitem__("exportVersion", "1.0"))
+    rejects("a decision without evidenceIds is rejected",
+            lambda e: e["decisions"][0].pop("evidenceIds"))
+    rejects("a legacy private evidence field is rejected",
+            lambda e: (e["decisions"][0].pop("evidenceIds"),
+                       e["decisions"][0].__setitem__("_evidenceIds", [])))
+    rejects("a malformed archive entry is rejected",
+            lambda e: e["archivedEvidence"][0].pop("archiveReason"))
+    rejects("duplicate current evidence ids are rejected",
+            lambda e: e["evidence"].append(copy.deepcopy(e["evidence"][0])))
+    rejects("an archive entry overlapping current evidence is rejected",
+            lambda e: e["archivedEvidence"][0]["evidence"].__setitem__(
+                "id", e["evidence"][0]["id"]))
+    rejects("an event sequence gap is rejected",
+            lambda e: e["events"][0].__setitem__("sequence", 5))
+    rejects("a mismatched decision evidence digest is rejected",
+            lambda e: e["decisions"][0].__setitem__("evidenceSetDigest",
+                                                    "sha256:" + "0" * 64))
+    rejects("an archive sequence beyond the log is rejected",
+            lambda e: e["archivedEvidence"][0].__setitem__("archivedAtSequence", 999))
+    rejects("a decision targeting a future revision is rejected",
+            lambda e: e["decisions"][0].__setitem__("targetAssessmentRevision", 99))
+
+    # ------------------------------------------------------------ conflicting prerequisites
+    conflict_requirements = copy.deepcopy(requirements)
+    by_req = {r["id"]: r for r in conflict_requirements}
+    by_req["REQ-venue-capacity-1"]["expectedValues"] = {
+        "field": "location.capacity", "minimum": 150, "unit": "people"}
+    capped = {
+        "id": "REQ-capped-capacity-1",
+        "version": 1,
+        "milestoneId": "MS-1",
+        "owner": "CON-ana",
+        "label": "Licensed occupancy stays below 120",
+        "predicateType": "numeric_within",
+        "expectedValues": {"field": "location.capacity", "maximum": 120, "unit": "people"},
+        "prerequisiteIds": [],
+        "requiredEvidenceType": "document",
+        "expiryPolicy": {"mode": "absolute", "value": "2027-03-07T00:00:00Z"},
+        "blocking": True,
+        "fieldBindings": ["location.capacity"],
+    }
+    combined = {
+        "id": "REQ-combined-capacity-1",
+        "version": 1,
+        "milestoneId": "MS-1",
+        "owner": "CON-ana",
+        "label": "The room satisfies both occupancy limits",
+        "predicateType": "evidence_present",
+        "expectedValues": {},
+        "prerequisiteIds": ["REQ-venue-capacity-1", "REQ-capped-capacity-1"],
+        "requiredEvidenceType": "document",
+        "expiryPolicy": {"mode": "absolute", "value": "2027-03-07T00:00:00Z"},
+        "blocking": True,
+        "fieldBindings": ["location.capacity"],
+    }
+    conflict_requirements.extend([capped, combined])
+    conflicted = evaluate(project_for(scenario, "baseline", 8),
+                          conflict_requirements, evidence)
+    conflict_status = statuses(conflicted)
+    check("a dependent of conflicting prerequisites is blocked",
+          conflict_status["REQ-combined-capacity-1"] == "blocked",
+          conflict_status["REQ-combined-capacity-1"])
+    conflict_residual = next(
+        r for r in conflicted["requirements"]
+        if r["requirementId"] == "REQ-combined-capacity-1")["residuals"]
+    check("the conflict names the field and both prerequisites",
+          conflict_residual
+          and conflict_residual[0]["code"] == "prerequisite_conflict"
+          and conflict_residual[0]["field"] == "location.capacity"
+          and set(conflict_residual[0]["prerequisiteIds"])
+          == {"REQ-venue-capacity-1", "REQ-capped-capacity-1"},
+          str(conflict_residual))
+    check("conflicting prerequisites do not default to supported",
+          conflict_status["REQ-capped-capacity-1"] != "supported")
+    check("the unmodified scenario reports no prerequisite conflict",
+          not any(r["code"] == "prerequisite_conflict"
+                  for req in baseline["requirements"] for r in req["residuals"]))
 
     # ------------------------------------------------------------ unaffected stability
     before_photo = next(r for r in baseline["requirements"]

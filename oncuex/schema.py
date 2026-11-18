@@ -839,3 +839,222 @@ def validate_snapshot(snapshot: dict, requirements: Iterable[dict], evidence: It
         problems = validate_evidence_record(ev, requirement_ids)
         if problems:
             raise SchemaError(problems[0])
+
+
+# ---------------------------------------------------------------- export contract
+EXPORT_VERSION = "2.0"
+
+
+def _validate_decision(decision: dict, evidence_ids: set[str]) -> list[str]:
+    if not isinstance(decision, dict):
+        return ["decision: must be an object"]
+    label = decision.get("id", "<decision>")
+    allowed = {
+        "id",
+        "actor",
+        "role",
+        "targetAssessmentRevision",
+        "requirementSetVersion",
+        "requirementSetDigest",
+        "evidenceSetDigest",
+        "integrationReviewResult",
+        "disposition",
+        "stateDigest",
+        "evidenceIds",
+    }
+    errors = _check_keys(decision, allowed, allowed, str(label))
+    if not (isinstance(decision.get("id"), str) and ID_PATTERNS["decision"].match(decision["id"])):
+        errors.append(f"{label}: id must match DEC-<n>")
+    if decision.get("role") != "project_manager":
+        errors.append(f"{label}: role must be project_manager")
+    if decision.get("disposition") != "accepted":
+        errors.append(f"{label}: disposition must be accepted")
+    for name in ("targetAssessmentRevision", "requirementSetVersion"):
+        if not type_ok("integer", decision.get(name)):
+            errors.append(f"{label}: {name} must be an integer")
+    for name in ("requirementSetDigest", "evidenceSetDigest", "stateDigest"):
+        value = decision.get(name)
+        if not (isinstance(value, str) and DIGEST.match(value)):
+            errors.append(f"{label}: {name} must be a sha256 digest")
+    if not isinstance(decision.get("integrationReviewResult"), dict):
+        errors.append(f"{label}: integrationReviewResult must be an object")
+    ids = decision.get("evidenceIds")
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        errors.append(f"{label}: evidenceIds must be a list of strings")
+    else:
+        if len(ids) != len(set(ids)):
+            errors.append(f"{label}: duplicate evidenceIds entry")
+        errors += [
+            f"{label}: evidenceIds names unknown record {i}" for i in ids if i not in evidence_ids
+        ]
+        if decision.get("evidenceSetDigest") != digest(ids):
+            errors.append(f"{label}: evidenceSetDigest does not match evidenceIds")
+    return errors
+
+
+def _validate_archive_entry(entry: dict) -> list[str]:
+    if not isinstance(entry, dict):
+        return ["archivedEvidence: entry must be an object"]
+    errors = _check_keys(
+        entry,
+        {"evidence", "archivedAtSequence", "archiveReason", "requirementSetVersion"},
+        {"evidence", "archivedAtSequence", "archiveReason", "requirementSetVersion"},
+        "archivedEvidence",
+    )
+    if not type_ok("integer", entry.get("archivedAtSequence")):
+        errors.append("archivedEvidence: archivedAtSequence must be an integer")
+    if not isinstance(entry.get("archiveReason"), str) or not entry["archiveReason"]:
+        errors.append("archivedEvidence: archiveReason must be a non-empty string")
+    if not type_ok("integer", entry.get("requirementSetVersion")):
+        errors.append("archivedEvidence: requirementSetVersion must be an integer")
+    errors += validate_evidence_record(entry.get("evidence", {}))
+    return errors
+
+
+def validate_export(export: dict) -> list[str]:
+    """Validate the documented export contract before a store accepts it."""
+    if not isinstance(export, dict):
+        return ["export: must be an object"]
+    allowed = {
+        "exportVersion",
+        "project",
+        "requirements",
+        "evidence",
+        "archivedEvidence",
+        "events",
+        "decisions",
+        "counters",
+    }
+    errors = _check_keys(export, allowed, allowed, "export")
+    if export.get("exportVersion") != EXPORT_VERSION:
+        errors.append(
+            f"export: unsupported exportVersion {export.get('exportVersion')!r}; "
+            f"expected {EXPORT_VERSION}"
+        )
+
+    project = export.get("project")
+    requirements = export.get("requirements")
+    evidence = export.get("evidence")
+    if not isinstance(project, dict):
+        errors.append("export.project: must be an object")
+    if not isinstance(requirements, list):
+        errors.append("export.requirements: must be a list")
+    if not isinstance(evidence, list):
+        errors.append("export.evidence: must be a list")
+    if errors and not isinstance(project, dict):
+        return errors
+
+    try:
+        validate_snapshot(project, requirements or [], evidence or [])
+    except SchemaError as exc:
+        errors.append(f"export record: {exc}")
+
+    archived = export.get("archivedEvidence")
+    archived_ids: set[str] = set()
+    if not isinstance(archived, list):
+        errors.append("export.archivedEvidence: must be a list")
+        archived = []
+    else:
+        for entry in archived:
+            errors += _validate_archive_entry(entry)
+            if isinstance(entry, dict) and isinstance(entry.get("evidence"), dict):
+                archived_ids.add(entry["evidence"].get("id"))
+        if len(archived_ids) != len(archived):
+            errors.append("export.archivedEvidence: evidence ids must be unique")
+
+    current_ids = {e.get("id") for e in evidence or [] if isinstance(e, dict)}
+    current_list = [e.get("id") for e in evidence or [] if isinstance(e, dict)]
+    if len(current_list) != len(current_ids):
+        duplicates = sorted({i for i in current_list if current_list.count(i) > 1})
+        errors.append(f"export: evidence ids must be unique; duplicated {duplicates}")
+    overlap = current_ids & archived_ids
+    if overlap:
+        errors.append(f"export: evidence ids appear current and archived {sorted(overlap)}")
+
+    decisions = export.get("decisions")
+    if not isinstance(decisions, list):
+        errors.append("export.decisions: must be a list")
+        decisions = []
+    known_evidence = current_ids | archived_ids
+    decision_ids = set()
+    for decision in decisions:
+        errors += _validate_decision(decision, known_evidence)
+        if isinstance(decision, dict):
+            if decision.get("id") in decision_ids:
+                errors.append(f"export.decisions: duplicate id {decision.get('id')}")
+            decision_ids.add(decision.get("id"))
+
+    events = export.get("events")
+    if not isinstance(events, list):
+        errors.append("export.events: must be a list")
+        events = []
+    previous = 0
+    for event in events:
+        if not isinstance(event, dict):
+            errors.append("export.events: entry must be an object")
+            continue
+        errors += _check_keys(
+            event,
+            {
+                "id",
+                "sequence",
+                "commandId",
+                "eventType",
+                "actor",
+                "expectedAssessmentRevision",
+                "resultingAssessmentRevision",
+                "assessedFactsChanged",
+                "payload",
+            },
+            {
+                "id",
+                "sequence",
+                "eventType",
+                "resultingAssessmentRevision",
+                "assessedFactsChanged",
+                "payload",
+            },
+            f"event {event.get('id', '<event>')}",
+        )
+        sequence = event.get("sequence")
+        if not type_ok("integer", sequence) or sequence != previous + 1:
+            errors.append(f"event {event.get('id', '<event>')}: sequence must follow {previous}")
+        previous = sequence if type_ok("integer", sequence) else previous
+        if event.get("eventType") not in EVENT_TYPES:
+            errors.append(f"event {event.get('id', '<event>')}: unknown eventType")
+        if not isinstance(event.get("assessedFactsChanged"), bool):
+            errors.append(f"event {event.get('id', '<event>')}: assessedFactsChanged must be boolean")
+        if not isinstance(event.get("payload"), dict):
+            errors.append(f"event {event.get('id', '<event>')}: payload must be an object")
+
+    counters = export.get("counters")
+    if not isinstance(counters, dict):
+        errors.append("export.counters: must be an object")
+    else:
+        errors += _check_keys(counters, {"sequence", "assessmentRevision"},
+                              {"sequence", "assessmentRevision"}, "export.counters")
+        sequence = counters.get("sequence")
+        revision = counters.get("assessmentRevision")
+        if not type_ok("integer", sequence) or not type_ok("integer", revision):
+            errors.append("export.counters: both counters must be integers")
+        else:
+            if sequence != previous:
+                errors.append("export.counters.sequence does not equal the last event")
+            if revision < 0:
+                errors.append("export.counters.assessmentRevision must not be negative")
+            for decision in decisions:
+                target = decision.get("targetAssessmentRevision") if isinstance(decision, dict) else None
+                if type_ok("integer", target) and target > revision:
+                    errors.append(
+                        f"{decision.get('id')}: targetAssessmentRevision exceeds the export"
+                    )
+            for entry in archived:
+                if not isinstance(entry, dict):
+                    continue
+                archived_at = entry.get("archivedAtSequence")
+                if type_ok("integer", archived_at) and archived_at > sequence:
+                    errors.append(
+                        f"archivedEvidence {entry.get('evidence', {}).get('id')}: "
+                        f"archivedAtSequence exceeds the event sequence"
+                    )
+    return errors

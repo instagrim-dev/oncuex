@@ -152,6 +152,7 @@ A `time` is `HH:MM` on the event date. A `collection` is compared by `sha256` ov
 | `evidenceSetDigest` | string | |
 | `integrationReviewResult` | object | `{ status, failedChecks[] }` |
 | `stateDigest` | string | Digest of assessed field values at acceptance; distinguishes lineage from staleness |
+| `evidenceIds` | string[] | Evidence the decision was based on; withdrawn records stay resolvable through the archive |
 | `explicitExceptions` | object[] | Each with reason, owner and affected requirement |
 | `disposition` | enum | `accepted`, `rejected` |
 | `timestamp` | timestamp | |
@@ -264,6 +265,20 @@ A command is validated before any state is touched. A rejected write leaves the 
 | `unknown_evidence` | Review names an evidence record that does not exist |
 | `invalid_disposition` | Review disposition is not `pending`, `accepted` or `rejected` |
 | `invalid_requirement` | A replacement requirement set does not satisfy the canonical schema |
+| `invalid_export` | An imported record fails the export contract |
+
+## Export contract
+
+An export carries `exportVersion: "2.0"` and exactly these sections: `project`, `requirements`, `evidence`, `archivedEvidence`, `events`, `decisions`, `counters`.
+
+- Decisions serialize `evidenceIds`, the records they were based on. The evidence set digest stays a digest; the identifiers are explicit.
+- A scope change does not delete evidence. Withdrawn records move to `archivedEvidence` as `{ evidence, archivedAtSequence, archiveReason, requirementSetVersion }`, so a historical decision remains readable after the record leaves the current set.
+- Import validates the version, every decision field, archive integrity, event sequencing and both counters. A failure rejects the whole record with `invalid_export`; nothing is partially loaded.
+- An evidence id may not be current and archived at once, may not appear twice in the current set, and an archived id cannot be re-attached.
+
+## Conflicting prerequisites
+
+A prerequisite cycle is reported as `prerequisite_cycle`. A separate condition is a pair of prerequisites whose declared constraints admit no common value: disjoint numeric ranges on the same field, or different exact values for it. The dependent reports `blocked` with `prerequisite_conflict`, naming the field, both prerequisite ids and their constraints. Precedence ambiguity never defaults to `supported`. Time-window prerequisites describe when work happens, not which value a field holds, so they are not compared.
 
 ## Impact computation
 

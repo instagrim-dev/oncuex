@@ -45,6 +45,12 @@ Failure maps to status by cause, not by severity:
 
 All five conditions hold only in the `supported` case.
 
+## Conflicting prerequisites
+
+Two prerequisites conflict when their declared constraints on the same field admit no common value. The comparison covers numeric ranges (`minimum`, `maximum`, `maximumMinorUnits`) and exact values (`set_equals` and the `reviewed` literal of `attestation_reviewed`). The dependent returns `blocked` with `prerequisite_conflict`, naming the field, both prerequisite ids and the constraints. This is independent of a cycle, which reports `prerequisite_cycle`.
+
+Time-window constraints are not compared: they constrain when work happens rather than the value a field holds, so treating disjoint windows as a contradiction would assert a rule the contract does not state.
+
 ## Integrated checks
 
 Requirement status is necessary and not sufficient. The six checks are evaluated against current state, independently of evidence currency. A requirement can be `outdated` while its check also fails; both are reported.

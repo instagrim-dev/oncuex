@@ -14,7 +14,7 @@ Supply all required evidence except one. The milestone reports the remaining req
 At the venue-change state each vendor record is individually reviewable, yet five conditions conflict: access ends before setup completes, occupancy is below headcount plus buffer, run of show exceeds the hard stop, the committed total exceeds the budget, and the attestation belongs to the previous venue. `integrated.status` is `fail` listing all six checks — the five failures plus `dependency_closure`, which reports the unmet blocking requirements. Each failure states its conflicting values. Per-requirement status alone must not produce readiness.
 
 **V4 — Ambiguous precedence is blocked, not supported.**
-Introduce a cycle in `prerequisiteIds`, or two prerequisites that cannot both hold. The affected requirements return `blocked` with the cycle path or the conflicting pair. No optimistic default to `supported`.
+Introduce a cycle in `prerequisiteIds`, or two prerequisites that cannot both hold. The affected requirements return `blocked` with the cycle path or the conflicting pair. No optimistic default to `supported`. A conflicting pair means two prerequisites whose declared numeric ranges or exact values on the same field have no common value; time-window prerequisites are not treated as conflicting.
 
 ## Change and impact
 
