@@ -1,15 +1,44 @@
 {
-  "schemaVersion": "1.0",
-  "oracleVersion": "1.0.0",
+  "schemaVersion": "1.1",
+  "oracleVersion": "2.0.0",
   "derivedFrom": "scenario.json",
   "provenance": {
     "kind": "synthetic",
     "note": "Expected outcomes for the reference scenario."
   },
+
+  "revisionModel": {
+    "assessmentRevision": "Monotonic counter over assessed facts. Increments when a bound field, the evidence set, the review disposition of evidence, or the requirement set changes. Does NOT increment on decision.recorded, because a decision records an opinion about facts and does not alter them.",
+    "eventSequence": "Monotonic counter over every appended event, including decision.recorded.",
+    "decisionBinding": "A decision stores targetAssessmentRevision, requirementSetVersion, requirementSetDigest and evidenceSetDigest. It is current iff targetAssessmentRevision equals the current assessmentRevision AND requirementSetVersion matches AND every evidence record in evidenceSetDigest remains accepted and unexpired.",
+    "why": "Binding a decision to the event sequence would stale it the instant it is written, because writing it advances that sequence. Binding it to the assessed facts keeps a decision current until a fact actually changes."
+  },
+
+  "timeline": [
+    { "command": "CMD-1", "event": "brief.adopted",          "eventSequence": 1,  "assessmentRevision": 1,  "requirementSetVersion": 1 },
+    { "command": "CMD-2", "event": "evidence.attached",      "eventSequence": 2,  "assessmentRevision": 2,  "detail": "EV-1" },
+    { "command": "CMD-3", "event": "evidence.attached",      "eventSequence": 3,  "assessmentRevision": 3,  "detail": "EV-2" },
+    { "command": "CMD-4", "event": "evidence.attached",      "eventSequence": 4,  "assessmentRevision": 4,  "detail": "EV-3" },
+    { "command": "CMD-5", "event": "evidence.attached",      "eventSequence": 5,  "assessmentRevision": 5,  "detail": "EV-4" },
+    { "command": "CMD-6", "event": "evidence.attached",      "eventSequence": 6,  "assessmentRevision": 6,  "detail": "EV-5" },
+    { "command": "CMD-7", "event": "evidence.attached",      "eventSequence": 7,  "assessmentRevision": 7,  "detail": "EV-6" },
+    { "command": "CMD-8", "event": "evidence.attached",      "eventSequence": 8,  "assessmentRevision": 8,  "detail": "EV-7" },
+    { "command": "CMD-9", "event": "decision.recorded",      "eventSequence": 9,  "assessmentRevision": 8,  "detail": "DEC-1", "note": "sequence advances, facts do not" },
+    { "command": "CMD-10", "event": "change.adopted",        "eventSequence": 10, "assessmentRevision": 9,  "detail": "CHG-1 venue change" },
+    { "command": "CMD-11", "event": "evidence.attached",     "eventSequence": 11, "assessmentRevision": 10, "detail": "EV-8" },
+    { "command": "CMD-12", "event": "evidence.attached",     "eventSequence": 12, "assessmentRevision": 11, "detail": "EV-9" },
+    { "command": "CMD-13", "event": "evidence.attached",     "eventSequence": 13, "assessmentRevision": 12, "detail": "EV-10" },
+    { "command": "CMD-14", "event": "evidence.attached",     "eventSequence": 14, "assessmentRevision": 13, "detail": "EV-11" },
+    { "command": "CMD-15", "event": "evidence.attached",     "eventSequence": 15, "assessmentRevision": 14, "detail": "EV-12" },
+    { "command": "CMD-16", "event": "evidence.attached",     "eventSequence": 16, "assessmentRevision": 15, "detail": "EV-13" },
+    { "command": "CMD-17", "event": "decision.recorded",     "eventSequence": 17, "assessmentRevision": 15, "detail": "DEC-2" }
+  ],
+
   "cases": [
     {
       "id": "O1",
       "state": "state.baseline",
+      "assessmentRevision": 8,
       "requirementStatus": {
         "REQ-venue-loading-1": "supported",
         "REQ-venue-capacity-1": "supported",
@@ -19,31 +48,29 @@
         "REQ-fire-permit-1": "supported",
         "REQ-photographer-deliverables-1": "supported"
       },
-      "integrated": {
-        "status": "pass",
-        "failingChecks": []
-      },
+      "integrated": { "status": "pass", "failingChecks": [] },
       "readiness": "ready_for_review",
-      "decisionEligibility": {
-        "eligible": true,
-        "role": "project_manager",
-        "targetRevision": 1
-      }
+      "decisionEligibility": { "eligible": true, "role": "project_manager", "targetAssessmentRevision": 8 }
     },
+
     {
       "id": "O2",
       "state": "state.venueChange",
+      "assessmentRevision": 9,
       "trigger": {
-        "changeFields": [
+        "changeCommand": "CHG-1",
+        "baseAssessmentRevision": 8,
+        "changedFields": [
           "location.venueId",
           "location.capacity",
-          "location.loadingWindow",
+          "location.loadingWindow.start",
+          "location.loadingWindow.end",
           "location.hardStop",
           "location.fireAttestation",
+          "location.roomPlan",
           "crew.arrivalTime",
           "budget.commitments"
-        ],
-        "baseRevision": 1
+        ]
       },
       "requirementStatus": {
         "REQ-venue-loading-1": "outdated",
@@ -54,7 +81,7 @@
         "REQ-fire-permit-1": "outdated",
         "REQ-photographer-deliverables-1": "supported"
       },
-      "statusRationale": "Every affected requirement has evidence bound to a field value that the change replaced, so each is outdated. None is missing: evidence existed. None is blocked: nothing here asserts that current evidence fails a predicate. The conflicts between current values are reported by the integrated checks, not by inventing a requirement failure from stale evidence.",
+      "statusRationale": "Every affected requirement holds evidence bound to a field value the change replaced, so each is outdated. None is missing: evidence existed. None is blocked: no predicate is asserted false against current values while its evidence is current. The conflicts between current values are reported by the integrated checks, which are evaluated against state, not evidence currency.",
       "impacted": {
         "requirementIds": [
           "REQ-venue-loading-1",
@@ -64,85 +91,74 @@
           "REQ-budget-total-1",
           "REQ-fire-permit-1"
         ],
-        "evidenceIds": [
-          "EV-1",
-          "EV-2",
-          "EV-3",
-          "EV-4",
-          "EV-5",
-          "EV-6"
-        ]
+        "evidenceIds": ["EV-1", "EV-2", "EV-3", "EV-4", "EV-5", "EV-6"]
       },
       "unaffected": {
-        "requirementIds": [
-          "REQ-photographer-deliverables-1"
-        ],
-        "evidenceIds": [
-          "EV-7"
-        ]
+        "requirementIds": ["REQ-photographer-deliverables-1"],
+        "evidenceIds": ["EV-7"]
       },
       "integrated": {
         "status": "fail",
         "failingChecks": [
           {
             "id": "access_vs_arrival",
-            "reason": "Loading window 06:00-07:30 ends before crew arrival 07:15 plus 45 minutes setup (needs access to 08:00)."
+            "reason": "Crew arrival 07:15 plus 45 minutes setup reaches 08:00; the loading window ends 07:30."
+          },
+          {
+            "id": "occupancy_vs_headcount",
+            "reason": "Licensed occupancy 110 is below guest count 120 plus circulation buffer 10, which requires 130."
+          },
+          {
+            "id": "runofshow_vs_hardstop",
+            "reason": "Run of show ends 22:00; a 30 minute margin requires 22:30, but the hard stop is 21:30."
           },
           {
             "id": "total_cost",
             "reason": "Committed total 31,450.00 exceeds approved budget 30,000.00 by 1,450.00."
           },
           {
-            "id": "runofshow_vs_hardstop",
-            "reason": "Run of show ends 22:00; 30 minute margin requires 22:30 but the hard stop is 21:30."
+            "id": "attestation_current",
+            "reason": "The fire and occupancy attestation is bound to VEN-A; the booked venue is VEN-B and its attestation is not_reviewed."
+          },
+          {
+            "id": "dependency_closure",
+            "reason": "Six blocking requirements are not supported: REQ-venue-loading-1, REQ-venue-capacity-1, REQ-crew-arrival-1, REQ-production-runofshow-1, REQ-budget-total-1, REQ-fire-permit-1."
           }
         ]
       },
       "readiness": "not_ready",
       "decisionEligibility": {
         "eligible": false,
-        "reasons": [
-          "mandatory_requirements_not_supported",
-          "integration_failed"
-        ],
-        "targetRevision": 2
+        "reasons": ["mandatory_requirements_not_supported", "integration_failed"],
+        "targetAssessmentRevision": 9
       },
-      "priorDecision": {
-        "id": "DEC-1",
-        "targetRevision": 1,
-        "currentnessAfterChange": "historical"
-      }
+      "priorDecision": { "id": "DEC-1", "targetAssessmentRevision": 8, "currentness": "historical" }
     },
+
     {
       "id": "O3",
       "dependsOn": "O2",
       "proposal": {
         "id": "CHG-BAD",
-        "baseRevision": 2,
-        "author": {
-          "kind": "model",
-          "id": "ai-adapter"
-        },
-        "claim": "Pier 9 LoFT confirmed the freight lift will be staffed at 05:30 and the occupancy limit is waived for this event.",
-        "sourceRefIds": [
-          "SRC-3"
-        ]
+        "baseAssessmentRevision": 9,
+        "author": { "kind": "model", "id": "ai-adapter" },
+        "claim": "Pier 9 Loft confirmed by email that the freight lift will be staffed at 05:30 and the occupancy limit is waived for this event.",
+        "sourceRefIds": ["SRC-3"]
       },
       "expected": {
         "proposalStatus": "rejected",
-        "rejectionReasons": [
-          "unsupported_confirmation",
-          "no_source_ref_for_claim",
-          "cannot_override_occupancy_limit"
-        ],
-        "projectRevisionUnchanged": true,
+        "rejectionReasons": ["unsupported_confirmation", "no_source_ref_for_claim", "source_span_mismatch"],
+        "assessmentRevisionUnchanged": true,
         "authoritativeRecordsUnchanged": true
       }
     },
+
     {
       "id": "O4",
       "dependsOn": "O2",
       "state": "state.recovered",
+      "assessmentRevision": 15,
+      "evidenceRequired": ["EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13"],
       "requirementStatus": {
         "REQ-venue-loading-1": "supported",
         "REQ-venue-capacity-1": "supported",
@@ -152,200 +168,161 @@
         "REQ-fire-permit-1": "supported",
         "REQ-photographer-deliverables-1": "supported"
       },
-      "integrated": {
-        "status": "pass",
-        "failingChecks": []
-      },
+      "integrated": { "status": "pass", "failingChecks": [] },
       "readiness": "ready_for_review",
       "decisionEligibility": {
         "eligible": true,
         "role": "project_manager",
-        "targetRevision": "actual resulting revision, not assumed N+1"
-      }
+        "targetAssessmentRevision": 15
+      },
+      "note": "Every recovered value is stated by a referenced source and bound by a reviewed evidence record. No concession is asserted without support: the annex occupancy of 140 and access to 08:00 come from SRC-3 and SRC-8, the rescoped catering and production figures from SRC-6 and SRC-7, the crew call from SRC-9 and the run of show from SRC-10."
     },
+
     {
       "id": "O5",
       "dependsOn": "O4",
-      "trigger": {
-        "changeFields": [
-          "location.venueId"
-        ],
-        "from": "VEN-B",
-        "to": "VEN-A"
-      },
+      "trigger": { "changeFields": ["location.venueId"], "from": "VEN-B", "to": "VEN-A" },
       "expected": {
+        "decisionEligibility": { "eligible": false, "reasons": ["revision_lineage_changed"] },
         "priorDecisionCurrentness": "historical",
-        "decisionEligibility": {
-          "eligible": false,
-          "reasons": [
-            "revision_lineage_changed",
-            "fresh_review_required"
-          ]
-        },
-        "note": "The venue value matches an earlier state, but the revision lineage does not. The prior acceptance is not restored or reusable."
+        "note": "The venue value matches an earlier state, but the assessment lineage does not. The prior acceptance is not restored or reusable."
       }
     },
+
     {
       "id": "O6",
       "state": "state.baseline",
-      "trigger": {
-        "expireEvidence": [
-          "EV-1"
-        ]
-      },
+      "assessmentRevision": 8,
+      "trigger": { "expireEvidence": ["EV-1"] },
       "expected": {
         "requirementStatus": {
           "REQ-venue-loading-1": "outdated",
-          "REQ-crew-arrival-1": "blocked"
+          "REQ-crew-arrival-1": "blocked",
+          "REQ-production-runofshow-1": "blocked",
+          "REQ-venue-capacity-1": "supported",
+          "REQ-budget-total-1": "supported",
+          "REQ-fire-permit-1": "supported",
+          "REQ-photographer-deliverables-1": "supported"
         },
-        "residualReasonCodes": [
-          "evidence_expired",
-          "prerequisite_not_supported"
-        ],
+        "statusRationale": "Expiring the loading evidence makes REQ-venue-loading-1 outdated. The two requirements that declare it as a prerequisite cannot be supported regardless of their own evidence, so both are blocked with prerequisite_not_supported.",
         "impacted": {
+          "requirementIds": ["REQ-venue-loading-1", "REQ-crew-arrival-1", "REQ-production-runofshow-1"],
+          "evidenceIds": ["EV-1", "EV-3", "EV-4"]
+        },
+        "unaffected": {
           "requirementIds": [
-            "REQ-venue-loading-1",
-            "REQ-crew-arrival-1"
-          ]
+            "REQ-venue-capacity-1",
+            "REQ-budget-total-1",
+            "REQ-fire-permit-1",
+            "REQ-photographer-deliverables-1"
+          ],
+          "evidenceIds": ["EV-2", "EV-5", "EV-6", "EV-7"]
+        },
+        "integrated": {
+          "status": "fail",
+          "failingChecks": ["dependency_closure"]
         },
         "readiness": "not_ready",
         "decisionEligibility": {
           "eligible": false,
-          "reasons": [
-            "mandatory_evidence_expired"
-          ]
+          "reasons": ["mandatory_evidence_expired", "mandatory_requirements_not_supported"],
+          "targetAssessmentRevision": 9
         },
         "priorDecisionCurrentness": "historical"
       }
     },
+
     {
       "id": "O7",
       "state": "state.baseline",
-      "trigger": {
-        "removeRequirement": "REQ-photographer-deliverables-1"
-      },
+      "trigger": { "removeRequirement": "REQ-photographer-deliverables-1" },
       "expected": {
-        "requirementSetVersion": "incremented",
+        "requirementSetVersion": 2,
         "priorDecisionCurrentness": "historical",
-        "decisionEligibility": {
-          "eligible": false,
-          "reasons": [
-            "requirement_set_changed",
-            "fresh_decision_required"
-          ]
-        },
+        "decisionEligibility": { "eligible": false, "reasons": ["requirement_set_changed"] },
         "historyPreserved": true
       }
     },
+
     {
       "id": "O8",
       "state": "state.baseline",
+      "trigger": { "removeEvidence": ["EV-2"], "markTaskComplete": "REQ-venue-capacity-1" },
+      "expected": {
+        "requirementStatus": { "REQ-venue-capacity-1": "missing" },
+        "readiness": "not_ready",
+        "residuals": [{ "requirementId": "REQ-venue-capacity-1", "code": "mandatory_evidence_missing" }],
+        "integrated": { "status": "fail", "failingChecks": ["dependency_closure"] }
+      }
+    },
+
+    {
+      "id": "O9",
+      "label": "Decision read immediately after recording remains current",
+      "state": "state.baseline",
       "trigger": {
-        "removeEvidence": [
-          "EV-2"
-        ],
-        "markTaskComplete": "REQ-venue-capacity-1"
+        "command": "CMD-9",
+        "action": "recordDecision",
+        "targetAssessmentRevision": 8,
+        "actor": "PM-rowan",
+        "role": "project_manager"
       },
       "expected": {
-        "requirementStatus": {
-          "REQ-venue-capacity-1": "missing"
-        },
-        "readiness": "not_ready",
-        "residuals": [
-          {
-            "requirementId": "REQ-venue-capacity-1",
-            "reason": "mandatory_evidence_missing"
-          }
-        ]
+        "eventSequence": 9,
+        "assessmentRevision": 8,
+        "decisionId": "DEC-1",
+        "decisionCurrentness": "current",
+        "verdict": "accepted-with-current-state-unmodified",
+        "note": "Recording the decision advances the event sequence to 9 and leaves the assessment revision at 8. A read immediately afterwards returns the decision as current."
+      }
+    },
+
+    {
+      "id": "O10",
+      "label": "Decision remains current after reload",
+      "dependsOn": "O9",
+      "trigger": { "action": "reload" },
+      "expected": {
+        "eventSequence": 9,
+        "assessmentRevision": 8,
+        "decisionId": "DEC-1",
+        "decisionCurrentness": "current",
+        "historyIntact": true
+      }
+    },
+
+    {
+      "id": "O11",
+      "label": "Decision recorded at recovery remains current",
+      "dependsOn": "O4",
+      "trigger": {
+        "command": "CMD-17",
+        "action": "recordDecision",
+        "targetAssessmentRevision": 15,
+        "actor": "PM-rowan",
+        "role": "project_manager"
+      },
+      "expected": {
+        "eventSequence": 17,
+        "assessmentRevision": 15,
+        "decisionId": "DEC-2",
+        "decisionCurrentness": "current",
+        "priorDecisions": [{ "id": "DEC-1", "currentness": "historical" }]
       }
     }
   ],
-  "evidenceBindings": [
-    {
-      "id": "EV-1",
-      "requirementId": "REQ-venue-loading-1",
-      "sourceRefId": "SRC-2",
-      "boundFieldVersions": {
-        "location.venueId": "VEN-A",
-        "location.loadingWindow": "05:00-12:00"
-      },
-      "expiresAt": "2027-03-07T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-2",
-      "requirementId": "REQ-venue-capacity-1",
-      "sourceRefId": "SRC-2",
-      "boundFieldVersions": {
-        "location.venueId": "VEN-A",
-        "location.capacity": 150
-      },
-      "expiresAt": "2027-03-07T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-3",
-      "requirementId": "REQ-crew-arrival-1",
-      "sourceRefId": "SRC-5",
-      "boundFieldVersions": {
-        "crew.arrivalTime": "07:00",
-        "location.loadingWindow": "05:00-12:00"
-      },
-      "expiresAt": "2027-03-07T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-4",
-      "requirementId": "REQ-production-runofshow-1",
-      "sourceRefId": "SRC-2",
-      "boundFieldVersions": {
-        "production.runOfShowEnd": "22:00",
-        "location.hardStop": "23:00"
-      },
-      "expiresAt": "2027-03-07T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-5",
-      "requirementId": "REQ-budget-total-1",
-      "sourceRefId": "SRC-1",
-      "boundFieldVersions": {
-        "budget.committedTotal": 2910000
-      },
-      "expiresAt": "2027-03-01T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-6",
-      "requirementId": "REQ-fire-permit-1",
-      "sourceRefId": "SRC-2",
-      "boundFieldVersions": {
-        "location.venueId": "VEN-A",
-        "location.fireAttestation": "reviewed"
-      },
-      "expiresAt": "2027-03-10T00:00:00Z",
-      "reviewDisposition": "accepted"
-    },
-    {
-      "id": "EV-7",
-      "requirementId": "REQ-photographer-deliverables-1",
-      "sourceRefId": "SRC-4",
-      "boundFieldVersions": {
-        "photographer.deliverables": {
-          "editedImages": 120,
-          "deliveryDays": 10
-        }
-      },
-      "expiresAt": "2027-03-12T00:00:00Z",
-      "reviewDisposition": "accepted"
-    }
-  ],
+
   "invariants": [
-    "The venue-change impacted set must equal O2.impacted and must not include REQ-photographer-deliverables-1.",
-    "EV-7 must remain supported across O2 and O4. A blanket reset is a failure.",
-    "No output may report accepted without a project_manager decision record.",
-    "A rejected or failed action leaves the project revision unchanged.",
+    "The venue-change impacted set equals O2.impacted and never contains REQ-photographer-deliverables-1 or EV-7.",
+    "EV-7 remains supported across O2 and O4. A blanket reset is a failure.",
+    "Expiring EV-1 impacts exactly the closure of its dependents: REQ-venue-loading-1, REQ-crew-arrival-1 and REQ-production-runofshow-1.",
+    "The integrated check set has exactly six members. A case that reports a subset of the checks that actually fail is incorrect.",
+    "decision.recorded never increments assessmentRevision.",
+    "A decision is current iff its targetAssessmentRevision equals the current assessmentRevision and no referenced evidence has expired.",
+    "No output reports accepted without a project_manager decision record.",
+    "A rejected or failed action leaves assessmentRevision unchanged.",
     "Reverting a field never restores a prior acceptance.",
-    "Duplicate command IDs return the original result and append nothing."
+    "A repeated commandId returns the original result and appends no event.",
+    "Every value asserted in state.recovered is stated by at least one sourceReference and bound by at least one accepted evidence record."
   ]
 }

@@ -1,5 +1,24 @@
 # Domain model
 
+## Two counters
+
+The project carries two independent monotonic counters. Conflating them stales a decision the instant it is written, because recording a decision appends an event.
+
+| Counter | Advances on | Purpose |
+| --- | --- | --- |
+| `eventSequence` | Every appended event, including `decision.recorded` | Audit total ordering |
+| `assessmentRevision` | Only events that change assessed facts: a bound field, the evidence set, an evidence's review disposition, or the requirement set | Binding target for a decision |
+
+The current record is a projection over the event sequence. `assessmentRevision` is a projection over assessed facts.
+
+A decision is **current** if and only if all hold:
+
+1. Its `targetAssessmentRevision` equals the current `assessmentRevision`.
+2. Its `requirementSetVersion` equals the current `requirementSetVersion`.
+3. Every evidence record in its `evidenceSetDigest` is still `accepted` and unexpired.
+
+Recording a decision increments `eventSequence` and leaves `assessmentRevision` unchanged, so an immediate read returns it as current. A reload reconstructs both counters from the event log and returns the same decision.
+
 ## Identifiers
 
 ```
@@ -13,25 +32,54 @@ DEC-<n>             decision
 CMD-<n>             command identity
 ```
 
-Records carry `schemaVersion` and ISO-8601 UTC timestamps. Revisions are monotonic integers scoped to the project.
+Records carry `schemaVersion` and ISO-8601 UTC timestamps.
 
-## Project
+## Typed field schema
+
+Every field that can appear in `fieldBindings` or `boundFieldVersions` is declared once, with a type. Bindings are validated against this schema at load time; an undeclared path is a schema error, not a runtime miss.
+
+| Path | Type |
+| --- | --- |
+| `assessmentRevision` | integer |
+| `brief.guestCount` | integer |
+| `brief.approvedBudget.minorUnits` | integer |
+| `location.venueId` | string |
+| `location.venueName` | string |
+| `location.capacity` | integer |
+| `location.roomPlan` | string |
+| `location.loadingWindow.start` | time |
+| `location.loadingWindow.end` | time |
+| `location.hardStop` | time |
+| `location.fireAttestation` | enum: `reviewed`, `not_reviewed`, `missing` |
+| `crew.arrivalTime` | time |
+| `production.runOfShowEnd` | time |
+| `budget.commitments` | collection, compared by digest |
+| `budget.committedTotal.currency` | string |
+| `budget.committedTotal.minorUnits` | integer |
+| `photographer.arrivalWindow.start` | time |
+| `photographer.arrivalWindow.end` | time |
+| `photographer.deliverables.editedImages` | integer |
+| `photographer.deliverables.deliveryDays` | integer |
+
+A `time` is `HH:MM` on the event date. A `collection` is compared by `sha256` over its canonical JSON (sorted keys, no whitespace); the digest verifies identity, not truth.
+
+## Records
+
+### Project
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | `PRJ-oncuex-launch` |
-| `revision` | integer | Increments once per accepted command |
-| `brief` | object | Structured brief |
+| `eventSequence` | integer | Appended events |
+| `assessmentRevision` | integer | Assessed-fact state |
+| `brief` | object | Structured brief, including `approvedBudget` and `guestCount` |
 | `eventDate` | date | Fixed |
 | `timezone` | string | IANA zone |
-| `location` | object | Venue ID and the venue fields evidence binds to |
-| `approvedBudget` | amount | Currency plus minor units |
-| `currency` | string | ISO-4217 |
-| `owner` | string | Project manager identity |
+| `location` | object | Venue fields evidence binds to |
 | `milestoneIds` | string[] | Ordered |
 | `requirementSetVersion` | integer | Increments on any scope change |
 
-## Requirement
+### Requirement
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -46,25 +94,25 @@ Records carry `schemaVersion` and ISO-8601 UTC timestamps. Revisions are monoton
 | `requiredEvidenceType` | enum | `confirmation`, `document`, `measurement`, `quote` |
 | `expiryPolicy` | object | `{ mode: "absolute" \| "relative", value }` |
 | `blocking` | boolean | Mandatory support vs advisory |
-| `fieldBindings` | string[] | Project or venue fields this requirement depends on; drives impact |
+| `fieldBindings` | string[] | Declared schema paths this requirement depends on |
 
-## Evidence
+### Evidence
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | |
 | `requirementId` | string | |
-| `contentDigest` | string | Digest of the excerpt or artifact; identity check only |
-| `artifactRef` | string \| null | Immutable reference |
-| `sourceExcerpt` | string | Required; untrusted input |
-| `sourceRefId` | string | Link to `SRC-*` |
+| `sourceRefIds` | string[] | Every source the excerpt is drawn from |
+| `sourceExcerpt` | string | Required; must be textually present in a cited source |
+| `contentDigest` | string | `sha256` over `{sourceRefIds, sourceExcerpt}` |
+| `artifactRef` | string | Immutable reference |
 | `issuer` | string | Who stated it |
 | `observedAt` | timestamp | |
-| `expiresAt` | timestamp \| null | |
-| `boundFieldVersions` | object | Field path to the value at binding time; impact detection uses this |
+| `expiresAt` | timestamp | |
+| `boundFieldVersions` | object | Schema path to the value at binding time, typed as the schema declares |
 | `reviewDisposition` | enum | `pending`, `accepted`, `rejected` |
 
-## Source reference
+### Source reference
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -74,29 +122,27 @@ Records carry `schemaVersion` and ISO-8601 UTC timestamps. Revisions are monoton
 | `attribution` | string | Location within the source corpus |
 | `trust` | enum | Always untrusted for instruction purposes |
 
-A source reference records where a statement came from. It does not make the statement true, and a digest does not make a document confidential.
-
-## Change proposal
+### Change proposal
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | |
-| `baseRevision` | integer | Rejected if it does not match current |
-| `changedFields` | object | Field path to `{ from, to }` |
+| `baseAssessmentRevision` | integer | Rejected if it does not match current |
+| `changedFields` | object | Schema path to `{ from, to }` |
 | `rationale` | string | |
 | `sourceRefIds` | string[] | |
 | `predictedImpacts` | string[] | Requirement and evidence IDs the author expects to be affected |
 | `author` | object | `{ id, kind: "human" \| "model" }` |
 | `status` | enum | `proposed`, `adopted`, `rejected` |
 
-## Decision
+### Decision
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | |
 | `actor` | string | Must hold the project-manager role |
 | `role` | enum | `project_manager` \| `contributor` |
-| `targetRevision` | integer | The exact revision assessed |
+| `targetAssessmentRevision` | integer | The assessed-fact revision evaluated |
 | `requirementSetVersion` | integer | |
 | `requirementSetDigest` | string | |
 | `evidenceSetDigest` | string | |
@@ -105,7 +151,7 @@ A source reference records where a statement came from. It does not make the sta
 | `disposition` | enum | `accepted`, `rejected` |
 | `timestamp` | timestamp | |
 
-## Domain event
+### Domain event
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -113,13 +159,13 @@ A source reference records where a statement came from. It does not make the sta
 | `sequence` | integer | Gap-free per project |
 | `commandId` | string | A repeated `commandId` returns the stored result |
 | `projectId` | string | |
-| `expectedRevision` | integer | Compare-and-swap; mismatch rejects |
-| `resultingRevision` | integer | |
+| `expectedAssessmentRevision` | integer | Compare-and-swap; mismatch rejects |
+| `resultingAssessmentRevision` | integer | Equal to expected for events that do not change assessed facts |
 | `actor` | string | |
 | `eventType` | enum | `brief.adopted`, `evidence.attached`, `evidence.reviewed`, `change.adopted`, `decision.recorded`, `requirementSet.changed` |
 | `payload` | object | Event-specific |
 
-The store is append-only. The current record is a projection over the event sequence.
+`decision.recorded` and `evidence.reviewed` where the disposition is unchanged are the events that advance `sequence` without advancing `assessmentRevision`.
 
 ## Assessment vocabulary
 
@@ -139,8 +185,8 @@ Requirement output:
   "requirementId": "REQ-venue-loading-1",
   "status": "outdated",
   "residuals": [
-    { "code": "bound_field_changed", "field": "location.venueId",
-      "evidenceId": "EV-1", "sourceRefId": "SRC-2", "sinceRevision": 2 }
+    { "code": "bound_field_changed", "field": "location.loadingWindow.end",
+      "evidenceId": "EV-1", "sourceRefId": "SRC-2", "sinceAssessmentRevision": 9 }
   ],
   "blocking": true
 }
@@ -151,13 +197,12 @@ Milestone output. `integrated` and `readiness` are separate fields and do not co
 ```json
 {
   "milestoneId": "MS-1",
+  "assessmentRevision": 9,
   "integrated": {
     "status": "fail",
     "checks": [
-      { "id": "access_vs_arrival", "status": "fail",
-        "reason": "Loading window 06:00-07:30 ends before crew arrival 07:15 plus 45 minutes setup, which needs access to 08:00." },
-      { "id": "total_cost", "status": "fail",
-        "reason": "Committed total 31,450.00 exceeds approved budget 30,000.00 by 1,450.00." }
+      { "id": "occupancy_vs_headcount", "status": "fail",
+        "reason": "Licensed occupancy 110 is below guest count 120 plus circulation buffer 10, which requires 130." }
     ]
   },
   "readiness": "not_ready",
@@ -165,26 +210,27 @@ Milestone output. `integrated` and `readiness` are separate fields and do not co
 }
 ```
 
-`ready_for_review` requires every blocking requirement `supported` and `integrated.status == "pass"`. `accepted` is never emitted by the evaluator; it exists only as a decision record. Unknown or ambiguous precedence yields `blocked` with a reason. No percentage substitutes for a named residual, and no task completion or model confidence upgrades a status.
+`ready_for_review` requires every blocking requirement `supported` **and** all six integrated checks passing. `accepted` is never emitted by the evaluator; it exists only as a decision record. Unknown or ambiguous precedence yields `blocked` with a reason. No percentage substitutes for a named residual, and no task completion or model confidence upgrades a status.
 
 ## Currentness
 
 | Situation | Behavior |
 | --- | --- |
-| A bound field changes | Bound evidence becomes `outdated`; dependents recomputed transitively |
-| Evidence passes `expiresAt` | Becomes `outdated`; the relevant review reopens |
+| A bound field changes | Bound evidence becomes `outdated`; dependents recomputed transitively; `assessmentRevision` increments |
+| Evidence passes `expiresAt` | Becomes `outdated`; the relevant review reopens; `assessmentRevision` increments |
 | Scope changes | New `requirementSetVersion`; a new decision is required; the prior decision remains history |
-| A value reverts to an earlier one | Revision lineage changed; the prior decision is not current; no automatic restoration |
-| A decision is read at a later revision | Returns `historical` plus named current residuals |
+| A value reverts to an earlier one | Lineage advanced; the prior decision is not current; no automatic restoration |
+| A decision is read at a later `assessmentRevision` | Returns `historical` plus named current residuals |
 | An unrelated field changes | Unaffected evidence stays `supported`; only the declared dependent set moves |
+| A decision is recorded | `eventSequence` increments; `assessmentRevision` does not; the decision reads as current |
 
 ## Write semantics
 
-1. Every write carries `commandId` and `expectedRevision`.
-2. A revision mismatch rejects with `conflict`; authoritative state is unchanged and the caller is told to reload.
+1. Every write carries `commandId` and `expectedAssessmentRevision`.
+2. A mismatch rejects with `conflict`; authoritative state is unchanged and the caller is told to reload.
 3. A repeated `commandId` returns the stored result and appends nothing.
 4. Validation order: schema, role, action identity, expected revision, domain rules.
-5. A failed action appends no event.
+5. A failed action appends no event and changes neither counter.
 6. Only `project_manager` records a decision. A `contributor` attempt is rejected with `role_denied`.
 7. Exceptions are additive records with reason, owner and affected requirement IDs.
 
@@ -192,12 +238,15 @@ Milestone output. `integrated` and `readiness` are separate fields and do not co
 
 A requirement declares `fieldBindings`; evidence declares `boundFieldVersions`. A change computes the transitive dependent set over both `fieldBindings` and `prerequisiteIds`, and returns `impacted` and `unaffected` requirement and evidence IDs.
 
-There is no blanket reset. In the reference scenario the photographer requirement binds only to `photographer.deliverables` and `photographer.arrivalWindow`, so it remains `supported` across a venue change. A cycle or unresolved prerequisite yields `blocked` with the cycle path in the reason.
+Dependency closure runs in both the change and the expiry case. Expiring a prerequisite's evidence makes every dependent `blocked`, not merely its own requirement `outdated`.
+
+There is no blanket reset. In the reference scenario the photographer requirement binds only to `photographer.deliverables.*` and `photographer.arrivalWindow.*`, so it remains `supported` across a venue change. A cycle or unresolved prerequisite yields `blocked` with the cycle path in the reason.
 
 ## Separation that must hold
 
 | Kept separate | Consequence of merging |
 | --- | --- |
+| Event sequence vs assessment revision | A decision stales itself on write |
 | Generation vs adoption | A suggestion becomes an authoritative fact |
 | Readiness vs acceptance | A computed status impersonates a human decision |
 | Evidence existence vs evidence truth | A digest is presented as verified reality |

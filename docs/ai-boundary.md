@@ -16,8 +16,8 @@ Every output is validated before storage:
 1. Valid JSON against a declared schema. Unknown fields are rejected, not ignored.
 2. Every factual claim carries a `sourceRefId` that exists in the corpus. A claim with no reference, or with a reference to a span that does not support it, fails.
 3. Missing values are represented as `unknown`, never as a plausible default.
-4. Output is stored as a `CHG-*` proposal with `author.kind = "model"` and `status = "proposed"`.
-5. The proposal is inert until a human adopts it through a command carrying a `baseRevision` and `expectedRevision`.
+4. Output is stored as a `CHG-*` proposal with `author.kind = "model"` and `status = "proposed"`. Storing a proposal does not advance `assessmentRevision`; only adopting it does.
+5. The proposal is inert until a human adopts it through a command carrying a `baseAssessmentRevision` and `expectedAssessmentRevision`.
 
 A validation failure yields one of `schema_invalid`, `unsupported_confirmation`, `no_source_ref_for_claim`, `source_span_mismatch`, `instruction_content_detected`. The UI renders the failure with the failing field, and authoritative state is untouched.
 
@@ -46,7 +46,7 @@ The working brief and readiness report are rendered from reviewed structured sta
 | --- | --- |
 | Model unavailable | The action reports unavailability. No substitute content is inserted. |
 | Timeout | The proposal is not created. The user may retry. |
-| Validation failure | The proposal is stored as rejected, or not stored, with the reason. |
+| Validation failure | The proposal is stored as rejected, or not stored, with the reason. `assessmentRevision` is unchanged. |
 | Partial response | Treated as invalid; partial proposals are never adopted automatically. |
 
-A failed call leaves the project revision and every record unchanged.
+A failed call leaves both counters and every record unchanged.

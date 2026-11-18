@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1.0",
-  "casesVersion": "1.0.0",
+  "schemaVersion": "1.1",
+  "casesVersion": "2.0.0",
   "provenance": {
     "kind": "synthetic",
-    "note": "Behavioral checks V1-V18. Each case states an action and the expected observable result."
+    "note": "Behavioral checks V1-V21. Each case states an action and the expected observable result."
   },
   "cases": [
     {
@@ -11,16 +11,10 @@
       "area": "readiness",
       "action": "Withhold the venue capacity evidence for REQ-venue-capacity-1 and mark its task complete.",
       "expected": {
-        "requirementStatus": {
-          "REQ-venue-capacity-1": "missing"
-        },
+        "requirementStatus": { "REQ-venue-capacity-1": "missing" },
         "readiness": "not_ready",
-        "residuals": [
-          {
-            "requirementId": "REQ-venue-capacity-1",
-            "code": "mandatory_evidence_missing"
-          }
-        ]
+        "residuals": [{ "requirementId": "REQ-venue-capacity-1", "code": "mandatory_evidence_missing" }],
+        "integrated": { "status": "fail", "failingChecks": ["dependency_closure"] }
       },
       "oracle": "O8"
     },
@@ -45,7 +39,9 @@
             "access_vs_arrival",
             "occupancy_vs_headcount",
             "runofshow_vs_hardstop",
-            "total_cost"
+            "total_cost",
+            "attestation_current",
+            "dependency_closure"
           ]
         },
         "readiness": "not_ready"
@@ -58,18 +54,13 @@
       "action": "Introduce a cycle in prerequisiteIds, or two prerequisites that cannot both hold.",
       "expected": {
         "requirementStatus": "blocked",
-        "residuals": [
-          {
-            "code": "prerequisite_cycle",
-            "path": "reported"
-          }
-        ]
+        "residuals": [{ "code": "prerequisite_cycle", "path": "reported" }]
       }
     },
     {
       "id": "V5",
       "area": "change",
-      "action": "Adopt the change from Foundry Hall to Pier 9 Loft at revision 1.",
+      "action": "Adopt the change from Foundry Hall to Pier 9 Loft at assessment revision 8.",
       "expected": {
         "impacted": "equals fixtures/expected-impact.json#O2.impacted",
         "unaffected": "equals fixtures/expected-impact.json#O2.unaffected",
@@ -81,29 +72,20 @@
     {
       "id": "V6",
       "area": "change",
-      "action": "Accept at revision 1, then adopt the venue change and read the decision.",
+      "action": "Accept at assessment revision 8, then adopt the venue change and read the decision.",
       "expected": {
         "decisionCurrentness": "historical",
-        "residualReasonCodes": [
-          "stale_decision"
-        ],
-        "decisionEligibility": {
-          "eligible": false
-        }
+        "decisionEligibility": { "eligible": false },
+        "residualReasonCodes": ["stale_decision"]
       },
-      "oracle": "O5"
+      "oracle": "O2"
     },
     {
       "id": "V7",
       "area": "change",
       "action": "After V6, revert the venue to Foundry Hall.",
       "expected": {
-        "decisionEligibility": {
-          "eligible": false,
-          "reasons": [
-            "revision_lineage_changed"
-          ]
-        },
+        "decisionEligibility": { "eligible": false, "reasons": ["revision_lineage_changed"] },
         "priorDecisionCurrentness": "historical",
         "historyPreserved": true
       },
@@ -116,12 +98,7 @@
       "expected": {
         "requirementSetVersion": "incremented",
         "priorDecisionCurrentness": "historical",
-        "decisionEligibility": {
-          "eligible": false,
-          "reasons": [
-            "requirement_set_changed"
-          ]
-        },
+        "decisionEligibility": { "eligible": false, "reasons": ["requirement_set_changed"] },
         "historyPreserved": true
       },
       "oracle": "O7"
@@ -133,8 +110,11 @@
       "expected": {
         "requirementStatus": {
           "REQ-venue-loading-1": "outdated",
-          "REQ-crew-arrival-1": "blocked"
+          "REQ-crew-arrival-1": "blocked",
+          "REQ-production-runofshow-1": "blocked"
         },
+        "impacted": "equals fixtures/expected-impact.json#O6.expected.impacted",
+        "unaffected": "equals fixtures/expected-impact.json#O6.expected.unaffected",
         "readiness": "not_ready",
         "priorDecisionCurrentness": "historical"
       },
@@ -143,10 +123,10 @@
     {
       "id": "V10",
       "area": "writes",
-      "action": "Submit a command with expectedRevision one behind current.",
+      "action": "Submit a command with expectedAssessmentRevision one behind current.",
       "expected": {
         "error": "conflict",
-        "revisionUnchanged": true,
+        "assessmentRevisionUnchanged": true,
         "eventsAppended": 0
       }
     },
@@ -156,7 +136,7 @@
       "action": "Submit the same decision twice with the same commandId.",
       "expected": {
         "secondCallReturnsStoredResult": true,
-        "decisionsForRevision": 1
+        "decisionsForAssessmentRevision": 1
       }
     },
     {
@@ -166,6 +146,7 @@
       "expected": {
         "recordUnchanged": true,
         "eventSequenceUnchanged": true,
+        "assessmentRevisionUnchanged": true,
         "decisionSetUnchanged": true
       }
     },
@@ -174,17 +155,10 @@
       "area": "writes",
       "action": "Attempt acceptance as a contributor, then as the project manager.",
       "expected": {
-        "contributor": {
-          "error": "role_denied",
-          "simulatedRoleLabelVisible": true
-        },
+        "contributor": { "error": "role_denied", "simulatedRoleLabelVisible": true },
         "projectManager": {
           "recorded": true,
-          "fields": [
-            "targetRevision",
-            "requirementSetDigest",
-            "evidenceSetDigest"
-          ]
+          "fields": ["targetAssessmentRevision", "requirementSetVersion", "requirementSetDigest", "evidenceSetDigest"]
         }
       }
     },
@@ -195,7 +169,7 @@
       "expected": {
         "generationErrorVisible": true,
         "proposalStatus": "rejected",
-        "projectRevisionUnchanged": true
+        "assessmentRevisionUnchanged": true
       }
     },
     {
@@ -204,10 +178,7 @@
       "action": "Request a recovery plan and receive an asserted vendor confirmation that no source supports.",
       "expected": {
         "proposalStatus": "rejected",
-        "rejectionReasons": [
-          "unsupported_confirmation",
-          "no_source_ref_for_claim"
-        ],
+        "rejectionReasons": ["unsupported_confirmation", "no_source_ref_for_claim", "source_span_mismatch"],
         "evidenceCreated": false,
         "attributionTransferred": false
       },
@@ -230,12 +201,15 @@
       "area": "persistence",
       "action": "Hard reload in a fresh session.",
       "expected": {
-        "revision": "unchanged",
+        "assessmentRevision": "unchanged",
+        "eventSequence": "unchanged",
         "evidenceBindings": "unchanged",
         "openQuestions": "unchanged",
         "decisions": "unchanged",
+        "decisionCurrentness": "unchanged",
         "history": "unchanged"
-      }
+      },
+      "oracle": "O10"
     },
     {
       "id": "V18",
@@ -247,6 +221,40 @@
         "residualsPresent": true,
         "openQuestionsPresent": true
       }
+    },
+    {
+      "id": "V19",
+      "area": "decision",
+      "action": "Record a decision at assessment revision 8, then read it without any intervening change.",
+      "expected": {
+        "eventSequence": 9,
+        "assessmentRevision": 8,
+        "decisionCurrentness": "current",
+        "note": "Recording the decision advances the event sequence and leaves the assessment revision unchanged."
+      },
+      "oracle": "O9"
+    },
+    {
+      "id": "V20",
+      "area": "decision",
+      "action": "Reload immediately after V19.",
+      "expected": {
+        "assessmentRevision": 8,
+        "decisionCurrentness": "current",
+        "historyIntact": true
+      },
+      "oracle": "O10"
+    },
+    {
+      "id": "V21",
+      "area": "decision",
+      "action": "Record a second decision at the recovered assessment revision 15.",
+      "expected": {
+        "assessmentRevision": 15,
+        "decisionCurrentness": "current",
+        "priorDecisions": [{ "id": "DEC-1", "currentness": "historical" }]
+      },
+      "oracle": "O11"
     }
   ]
 }
