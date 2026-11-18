@@ -100,6 +100,15 @@ def sets(block: dict) -> tuple[set[str], set[str], set[str], set[str]]:
     )
 
 
+def command(command_id: str, expected: int, **extra) -> dict:
+    return {
+        "commandId": command_id,
+        "role": "project_manager",
+        "expectedAssessmentRevision": expected,
+        **extra,
+    }
+
+
 def statuses(assessment: dict) -> dict[str, str]:
     return {r["requirementId"]: r["status"] for r in assessment["requirements"]}
 
@@ -198,6 +207,178 @@ def main() -> int:
     check("capacity is unaffected by expiry",
           expiry_status["REQ-venue-capacity-1"] == "supported",
           expiry_status.get("REQ-venue-capacity-1"))
+
+    # ------------------------------------------------------------ evidence review
+    review_store = Store(project_for(scenario, "baseline", 8),
+                         copy.deepcopy(requirements), base_evidence(scenario))
+    review_store.review_evidence(command("CMD-R1", 8), "EV-1", "pending")
+    review_check = review_store.assess()
+    check("a withdrawn review withdraws support",
+          statuses(review_check)["REQ-venue-loading-1"] == "missing",
+          statuses(review_check).get("REQ-venue-loading-1"))
+    check("a changed disposition increments the assessed revision",
+          review_store.assessment_revision == 9, str(review_store.assessment_revision))
+
+    sequence_before = review_store.sequence
+    review_store.review_evidence(command("CMD-R2", 9), "EV-1", "pending")
+    check("an unchanged disposition advances only the sequence",
+          review_store.assessment_revision == 9
+          and review_store.sequence == sequence_before + 1,
+          f"rev={review_store.assessment_revision} seq={review_store.sequence}")
+
+    review_store.review_evidence(command("CMD-R3", 9), "EV-1", "accepted")
+    check("re-accepting the record restores support",
+          statuses(review_store.assess())["REQ-venue-loading-1"] == "supported"
+          and review_store.assessment_revision == 10,
+          statuses(review_store.assess()).get("REQ-venue-loading-1"))
+
+    # ------------------------------------------------------------ reload idempotency
+    replay_store = Store(project_for(scenario, "baseline", 8),
+                         copy.deepcopy(requirements), base_evidence(scenario))
+    decision_command = command("CMD-RL", 8, actor="PM-rowan", decisionId="DEC-RL")
+    replay_store.record_decision(copy.deepcopy(decision_command))
+    restored_store = Store.from_export(replay_store.export())
+    sequence_before = restored_store.sequence
+    replay_result = restored_store.record_decision(copy.deepcopy(decision_command))
+    check("a command replayed after reload returns the stored result",
+          replay_result.get("decisionId") == "DEC-RL", str(replay_result))
+    check("a command replayed after reload appends nothing",
+          restored_store.sequence == sequence_before, str(restored_store.sequence))
+    check("a command replayed after reload keeps one decision",
+          len(restored_store.export()["decisions"]) == 1)
+
+    # ------------------------------------------------------------ scope change
+    scope_store = Store(project_for(scenario, "baseline", 8),
+                        copy.deepcopy(requirements), base_evidence(scenario))
+    scope_store.record_decision(command("CMD-S1", 8, actor="PM-rowan", decisionId="DEC-S"))
+    trimmed_requirements = [copy.deepcopy(r) for r in requirements
+                            if r["id"] != "REQ-photographer-deliverables-1"]
+    trimmed_evidence = [copy.deepcopy(e) for e in evidence if e["id"] != "EV-7"]
+    scope_store.change_requirement_set(
+        command("CMD-S2", 8), trimmed_requirements, trimmed_evidence)
+    check("scope change increments the requirement set version",
+          scope_store.project["requirementSetVersion"] == 2,
+          str(scope_store.project["requirementSetVersion"]))
+    check("scope change keeps the prior decision as history",
+          scope_store.currentness("DEC-S") == "historical")
+    check("scope change explains why acceptance is closed",
+          scope_store.eligibility()["reasons"] == ["requirement_set_changed"],
+          str(scope_store.eligibility()["reasons"]))
+    check("scope change preserves the earlier decision's target revision",
+          scope_store.latest_decision()["targetAssessmentRevision"] == 8)
+    check("the trimmed set is still ready for review",
+          scope_store.assess()["readiness"] == "ready_for_review",
+          str(scope_store.assess()["residualReasonCodes"]))
+
+    stale_scope = Store(project_for(scenario, "baseline", 8),
+                        copy.deepcopy(requirements), base_evidence(scenario))
+    record_before = json.dumps(stale_scope.export(), sort_keys=True)
+    try:
+        stale_scope.change_requirement_set(
+            command("CMD-S3", 8), trimmed_requirements, copy.deepcopy(evidence))
+        check("scope change rejects evidence for a removed requirement", False, "no error")
+    except CommandError as exc:
+        check("scope change rejects evidence for a removed requirement",
+              exc.code == "invalid_evidence", exc.code)
+    check("rejected scope change leaves the record byte-identical",
+          json.dumps(stale_scope.export(), sort_keys=True) == record_before)
+
+    added_store = Store(project_for(scenario, "baseline", 8),
+                        copy.deepcopy(requirements), base_evidence(scenario))
+    added_store.record_decision(command("CMD-A1", 8, actor="PM-rowan", decisionId="DEC-A"))
+    extended = copy.deepcopy(requirements)
+    extended.append({
+        "id": "REQ-logistics-1",
+        "version": 1,
+        "milestoneId": "MS-1",
+        "owner": "CON-ana",
+        "label": "Freight logistics confirm the dock booking",
+        "predicateType": "evidence_present",
+        "expectedValues": {},
+        "prerequisiteIds": [],
+        "requiredEvidenceType": "document",
+        "expiryPolicy": {"mode": "absolute", "value": "2027-03-07T00:00:00Z"},
+        "blocking": True,
+        "fieldBindings": ["location.venueId"],
+    })
+    added_store.change_requirement_set(
+        command("CMD-A2", 8), extended, copy.deepcopy(evidence))
+    added_status = statuses(added_store.assess())
+    check("an added requirement without evidence is missing",
+          added_status.get("REQ-logistics-1") == "missing",
+          str(added_status.get("REQ-logistics-1")))
+    check("an added requirement closes readiness",
+          added_store.assess()["readiness"] == "not_ready")
+    check("adding scope keeps the prior decision historical",
+          added_store.currentness("DEC-A") == "historical")
+    check("adding scope still reports the changed requirement set",
+          "requirement_set_changed" in added_store.eligibility()["reasons"],
+          str(added_store.eligibility()["reasons"]))
+
+    # ------------------------------------------------------------ revert lineage
+    lineage_store = Store(project_for(scenario, "baseline", 8),
+                          copy.deepcopy(requirements), base_evidence(scenario))
+    lineage_store.record_decision(command("CMD-L1", 8, actor="PM-rowan", decisionId="DEC-L"))
+    venue_target = copy.deepcopy(scenario["state"]["venueChange"])
+    venue_target.pop("assessmentRevision", None)
+    lineage_store.adopt_change(command("CMD-L2", 8), {
+        "id": "CHG-L1",
+        "changedFields": changed_fields(scenario["state"]["baseline"], venue_target),
+    })
+    venue_status = lineage_store.decision_status("DEC-L")
+    check("a venue change returns the decision as historical",
+          venue_status["currentness"] == "historical")
+    check("a venue change is explained as a stale decision",
+          venue_status["residualReasonCodes"] == ["stale_decision"],
+          str(venue_status["residualReasonCodes"]))
+    check("venue-change eligibility matches the oracle",
+          set(lineage_store.eligibility()["reasons"])
+          == set(cases["O2"]["decisionEligibility"]["reasons"]),
+          str(lineage_store.eligibility()["reasons"]))
+
+    baseline_target = copy.deepcopy(scenario["state"]["baseline"])
+    baseline_target.pop("assessmentRevision", None)
+    lineage_store.adopt_change(command("CMD-L3", 9), {
+        "id": "CHG-L2",
+        "changedFields": changed_fields(venue_target, baseline_target),
+    })
+    check("revert restores readiness", lineage_store.assess()["readiness"] == "ready_for_review",
+          str(lineage_store.assess()["residualReasonCodes"]))
+    check("revert does not revive the acceptance",
+          lineage_store.currentness("DEC-L") == "historical")
+    revert_eligibility = lineage_store.eligibility()
+    check("revert is explained by revision lineage",
+          revert_eligibility["reasons"] == ["revision_lineage_changed"]
+          and revert_eligibility["eligible"] is False,
+          str(revert_eligibility))
+    check("a reverted state reports lineage, not staleness",
+          lineage_store.decision_status("DEC-L")["residualReasonCodes"]
+          == ["revision_lineage_changed"],
+          str(lineage_store.decision_status("DEC-L")))
+
+    # ------------------------------------------------------------ expiry eligibility
+    expiry_decision = Store(project_for(scenario, "baseline", 8),
+                            copy.deepcopy(requirements), base_evidence(scenario))
+    expiry_decision.record_decision(command("CMD-X1", 8, actor="PM-rowan", decisionId="DEC-X"))
+    expiry_decision.project["_now"] = "2027-03-08T00:00:00Z"
+    for record in expiry_decision.evidence:
+        if record["id"] != "EV-1":
+            record["expiresAt"] = "2027-03-20T00:00:00Z"
+    check("expiry makes the prior acceptance historical",
+          expiry_decision.currentness("DEC-X") == "historical")
+    check("expiry is explained by expired evidence, not lineage",
+          expiry_decision.decision_status("DEC-X")["residualReasonCodes"]
+          == ["mandatory_evidence_expired"],
+          str(expiry_decision.decision_status("DEC-X")))
+    check("expiry does not move the assessment revision",
+          expiry_decision.assessment_revision == 8,
+          str(expiry_decision.assessment_revision))
+    expiry_eligibility = expiry_decision.eligibility()
+    check("expiry eligibility matches the oracle",
+          set(expiry_eligibility["reasons"])
+          == set(cases["O6"]["expected"]["decisionEligibility"]["reasons"]),
+          str(expiry_eligibility["reasons"]))
+    check("expiry closes acceptance", expiry_eligibility["eligible"] is False)
 
     # ------------------------------------------------------------ pure functions
     computed = impact_of_change(set(changed), requirements, evidence)

@@ -20,11 +20,13 @@ from typing import Any
 from .engine import combine_impact, evaluate, impact_of_change, impact_of_expiry
 from .schema import (
     FIELD_SCHEMA,
+    REVIEW_DISPOSITIONS,
     TYPED_PATHS,
     digest,
     is_expired,
     validate_brief,
     validate_evidence_record,
+    validate_requirement,
     value_matches,
 )
 
@@ -124,6 +126,71 @@ class Store:
                 return "historical"
         return "current"
 
+    def decision_status(self, decision_id: str) -> dict:
+        """Currentness plus the reason code that explains a historical decision."""
+        decision = self._decisions.get(decision_id)
+        if decision is None:
+            raise CommandError("unknown_decision", decision_id)
+        if self.currentness(decision_id) == "current":
+            return {"id": decision_id, "currentness": "current", "residualReasonCodes": []}
+        if decision["requirementSetVersion"] != self.project.get("requirementSetVersion", 1):
+            code = "requirement_set_changed"
+        elif decision["targetAssessmentRevision"] == self.assessment_revision:
+            # Same revision and set: the only way to be historical is expiry.
+            code = "mandatory_evidence_expired"
+        elif self._state_digest() == decision.get("stateDigest"):
+            code = "revision_lineage_changed"
+        else:
+            code = "stale_decision"
+        return {
+            "id": decision_id,
+            "currentness": "historical",
+            "residualReasonCodes": [code],
+            "targetAssessmentRevision": decision["targetAssessmentRevision"],
+            "currentResidualReasonCodes": self.assess()["residualReasonCodes"],
+        }
+
+    def eligibility(self, role: str = "project_manager") -> dict:
+        """Whether acceptance is available now, with the codes that block it."""
+        assessment = self.assess()
+        reasons: list[str] = []
+        if role != "project_manager":
+            reasons.append("role_denied")
+        if any(r["status"] != "supported" for r in assessment["requirements"]):
+            reasons.append("mandatory_requirements_not_supported")
+        now = self.project.get("_now", "1970-01-01T00:00:00Z")
+        if any(
+            e.get("reviewDisposition") == "accepted" and is_expired(e, now)
+            for e in self.evidence
+        ):
+            reasons.append("mandatory_evidence_expired")
+        # A closed dependency graph is already reported as an unmet requirement,
+        # so integration_failed counts only the other five checks.
+        if any(c["id"] != "dependency_closure" for c in assessment["integrated"]["checks"]):
+            reasons.append("integration_failed")
+
+        latest = self.latest_decision()
+        if latest:
+            if latest["requirementSetVersion"] != self.project.get("requirementSetVersion", 1):
+                reasons.append("requirement_set_changed")
+            elif (
+                assessment["readiness"] == "ready_for_review"
+                and latest["targetAssessmentRevision"] != self.assessment_revision
+            ):
+                if self._state_digest() == latest.get("stateDigest"):
+                    reasons.append("revision_lineage_changed")
+                else:
+                    reasons.append("stale_revision")
+        return {
+            "eligible": not reasons,
+            "reasons": reasons,
+            "targetAssessmentRevision": self.assessment_revision,
+        }
+
+    def _state_digest(self) -> str:
+        assessed_state = {k: v for k, v in self.project.items() if not k.startswith("_")}
+        return digest(assessed_state)
+
     # ---------------------------------------------------------------- writes
     def _replay(self, command: dict) -> dict | None:
         command_id = command.get("commandId")
@@ -149,12 +216,19 @@ class Store:
         self._check_revision(command)
         return None
 
-    def _commit(self, command: dict, event_type: str, payload: dict) -> dict:
+    def _commit(
+        self,
+        command: dict,
+        event_type: str,
+        payload: dict,
+        assessed: bool | None = None,
+    ) -> dict:
         """Append the event and advance both counters. Cannot reject."""
         if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
             raise CommandError("unknown_event", event_type)
 
-        assessed = event_type in ASSESSED_EVENTS
+        if assessed is None:
+            assessed = event_type in ASSESSED_EVENTS
         if assessed:
             self.assessment_revision += 1
         self.sequence += 1
@@ -167,6 +241,7 @@ class Store:
             "actor": command.get("actor"),
             "expectedAssessmentRevision": command.get("expectedAssessmentRevision"),
             "resultingAssessmentRevision": self.assessment_revision,
+            "assessedFactsChanged": assessed,
             "payload": payload,
         }
         self.events.append(event)
@@ -233,6 +308,72 @@ class Store:
             "changedPaths": sorted(fields),
         })
 
+    def review_evidence(self, command: dict, evidence_id: str, disposition: str) -> dict:
+        """Record a review disposition. A changed disposition is an assessed fact."""
+        replay = self._replay(command)
+        if replay is not None:
+            return replay
+        if command.get("role") not in ("project_manager", "contributor"):
+            raise CommandError("role_denied")
+        record = next((e for e in self.evidence if e["id"] == evidence_id), None)
+        if record is None:
+            raise CommandError("unknown_evidence", evidence_id)
+        if disposition not in REVIEW_DISPOSITIONS:
+            raise CommandError("invalid_disposition", disposition)
+        replay = self._begin(command, "evidence.reviewed")
+        if replay is not None:
+            return replay
+        previous = record["reviewDisposition"]
+        record["reviewDisposition"] = disposition
+        return self._commit(
+            command,
+            "evidence.reviewed",
+            {
+                "evidenceId": evidence_id,
+                "disposition": disposition,
+                "previousDisposition": previous,
+            },
+            assessed=disposition != previous,
+        )
+
+    def change_requirement_set(
+        self,
+        command: dict,
+        requirements: list[dict],
+        evidence: list[dict],
+    ) -> dict:
+        """Replace the requirement set, incrementing its version once."""
+        replay = self._replay(command)
+        if replay is not None:
+            return replay
+        if command.get("role") != "project_manager":
+            raise CommandError("role_denied")
+        replay = self._begin(command, "requirementSet.changed")
+        if replay is not None:
+            return replay
+
+        requirement_ids = {r.get("id") for r in requirements if isinstance(r, dict)}
+        if len(requirement_ids) != len(requirements):
+            raise CommandError("invalid_requirement", "requirements need unique string ids")
+        for req in requirements:
+            problems = validate_requirement(req, requirement_ids)
+            if problems:
+                raise CommandError("invalid_requirement", problems[0])
+        for ev in evidence:
+            problems = validate_evidence_record(ev, requirement_ids)
+            if problems:
+                raise CommandError("invalid_evidence", problems[0])
+
+        version = self.project.get("requirementSetVersion", 1) + 1
+        self.requirements = copy.deepcopy(requirements)
+        self.evidence = copy.deepcopy(evidence)
+        self.project["requirementSetVersion"] = version
+        return self._commit(command, "requirementSet.changed", {
+            "requirementSetVersion": version,
+            "requirementIds": sorted(requirement_ids),
+            "evidenceIds": [e["id"] for e in evidence],
+        })
+
     def record_decision(self, command: dict) -> dict:
         # A repeated command returns the stored result before any other validation,
         # so a retried acceptance is idempotent rather than a duplicate.
@@ -265,6 +406,7 @@ class Store:
             "evidenceSetDigest": digest(evidence_ids),
             "integrationReviewResult": assessment["integrated"],
             "disposition": "accepted",
+            "stateDigest": self._state_digest(),
             "_evidenceIds": evidence_ids,
         }
         result = self._commit(command, "decision.recorded", {"decisionId": decision_id})
@@ -298,6 +440,28 @@ class Store:
                 raise CommandError("bad_path", path)
             cursor = cursor[part]
         cursor[parts[-1]] = copy.deepcopy(value)
+
+    @classmethod
+    def from_export(cls, export: dict) -> "Store":
+        """Rebuild a store, including replay results, from an export."""
+        store = cls(export["project"], export["requirements"], export["evidence"])
+        store.sequence = export["counters"]["sequence"]
+        store.assessment_revision = export["counters"]["assessmentRevision"]
+        store.events = copy.deepcopy(export["events"])
+        store._decisions = {d["id"]: copy.deepcopy(d) for d in export["decisions"]}
+        for event in store.events:
+            command_id = event.get("commandId")
+            if not command_id:
+                continue
+            result = {
+                "sequence": event["sequence"],
+                "assessmentRevision": event["resultingAssessmentRevision"],
+                "assessedFactsChanged": bool(event.get("assessedFactsChanged")),
+            }
+            if event["eventType"] == "decision.recorded":
+                result["decisionId"] = event.get("payload", {}).get("decisionId")
+            store._results[command_id] = result
+        return store
 
     def export(self) -> dict:
         return {

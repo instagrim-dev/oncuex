@@ -151,6 +151,7 @@ A `time` is `HH:MM` on the event date. A `collection` is compared by `sha256` ov
 | `requirementSetDigest` | string | |
 | `evidenceSetDigest` | string | |
 | `integrationReviewResult` | object | `{ status, failedChecks[] }` |
+| `stateDigest` | string | Digest of assessed field values at acceptance; distinguishes lineage from staleness |
 | `explicitExceptions` | object[] | Each with reason, owner and affected requirement |
 | `disposition` | enum | `accepted`, `rejected` |
 | `timestamp` | timestamp | |
@@ -165,6 +166,7 @@ A `time` is `HH:MM` on the event date. A `collection` is compared by `sha256` ov
 | `projectId` | string | |
 | `expectedAssessmentRevision` | integer | Compare-and-swap; mismatch rejects |
 | `resultingAssessmentRevision` | integer | Equal to expected for events that do not change assessed facts |
+| `assessedFactsChanged` | boolean | Whether this event advanced `assessmentRevision` |
 | `actor` | string | |
 | `eventType` | enum | `brief.adopted`, `evidence.attached`, `evidence.reviewed`, `change.adopted`, `decision.recorded`, `requirementSet.changed` |
 | `payload` | object | Event-specific |
@@ -221,7 +223,7 @@ Milestone output. `integrated` and `readiness` are separate fields and do not co
 | Situation | Behavior |
 | --- | --- |
 | A bound field changes | Bound evidence becomes `outdated`; dependents recomputed transitively; `assessmentRevision` increments |
-| Evidence passes `expiresAt` | Becomes `outdated`; the relevant review reopens; `assessmentRevision` increments |
+| Evidence passes `expiresAt` | Becomes `outdated`; the relevant review reopens; the decision reads `historical`. No event is appended, so `assessmentRevision` does not move (V21) |
 | Scope changes | New `requirementSetVersion`; a new decision is required; the prior decision remains history |
 | A value reverts to an earlier one | Lineage advanced; the prior decision is not current; no automatic restoration |
 | A decision is read at a later `assessmentRevision` | Returns `historical` plus named current residuals |
@@ -241,6 +243,8 @@ A command is validated before any state is touched. A rejected write leaves the 
 6. A change may not write a counter or an identity. `assessmentRevision` rejects with `immutable_path`, because rewriting it would corrupt the binding every decision depends on.
 7. Only `project_manager` records a decision. A `contributor` attempt is rejected with `role_denied`.
 8. Exceptions are additive records with reason, owner and affected requirement IDs.
+9. `evidence.reviewed` records a review disposition. A changed disposition is an assessed fact; an unchanged one advances only the sequence. Either simulated role may review evidence; only the project manager accepts.
+10. `requirementSet.changed` replaces the requirement set with evidence that resolves within it, increments `requirementSetVersion` once, and leaves prior decisions readable as history.
 
 ### Rejection codes
 
@@ -257,6 +261,9 @@ A command is validated before any state is touched. A rejected write leaves the 
 | `bad_path` | Intermediate container does not exist |
 | `type_mismatch` | Bound evidence value does not match the declared type |
 | `not_eligible` | Readiness or integrated checks do not permit a decision |
+| `unknown_evidence` | Review names an evidence record that does not exist |
+| `invalid_disposition` | Review disposition is not `pending`, `accepted` or `rejected` |
+| `invalid_requirement` | A replacement requirement set does not satisfy the canonical schema |
 
 ## Impact computation
 

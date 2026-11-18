@@ -265,6 +265,17 @@ def main() -> int:
           all(e["type"] == "document" for e in restored.evidence),
           str(sorted({e["type"] for e in restored.evidence})))
 
+    replay_sequence = restored.sequence
+    replay = restored.record_decision(
+        command("CMD-18", 16, actor="PM-rowan", decisionId="DEC-2"))
+    check("a retried acceptance after reload returns the stored result",
+          replay.get("decisionId") == "DEC-2", str(replay))
+    check("a retried acceptance after reload appends nothing",
+          restored.sequence == replay_sequence, str(restored.sequence))
+    check("a retried acceptance after reload adds no decision",
+          len(restored.export()["decisions"]) == 2,
+          str(len(restored.export()["decisions"])))
+
     print()
     if failures:
         print(f"{len(failures)} check(s) failed:")
@@ -297,14 +308,7 @@ def diff_state(current: dict, target: dict) -> dict:
 
 
 def reload_from_export(store: Store) -> Store:
-    export = store.export()
-    project = export["project"]
-    rebuilt = Store(project, export["requirements"], export["evidence"])
-    rebuilt.sequence = export["counters"]["sequence"]
-    rebuilt.assessment_revision = export["counters"]["assessmentRevision"]
-    rebuilt.events = export["events"]
-    rebuilt._decisions = {d["id"]: d for d in export["decisions"]}
-    return rebuilt
+    return Store.from_export(store.export())
 
 
 if __name__ == "__main__":
