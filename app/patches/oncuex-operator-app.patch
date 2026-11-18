@@ -5809,118 +5809,11 @@ new file mode 100644
 +    />
 +  );
 +};
-diff --git a/app/src/components/oncuex/activity-sheet.tsx b/app/src/components/oncuex/activity-sheet.tsx
-new file mode 100644
---- /dev/null
-+++ b/app/src/components/oncuex/activity-sheet.tsx
-@@ -0,0 +1,102 @@
-+import type { useOperatorSession } from "@/hooks/use-operator-session";
-+import { activityEntries } from "@/oncuex/activity";
-+import { sourceAttribution } from "@/oncuex/scenario";
-+import { formatDate } from "@/oncuex/format";
-+import { History } from "lucide-react";
-+import {
-+  Sheet,
-+  SheetContent,
-+  SheetDescription,
-+  SheetHeader,
-+  SheetTitle,
-+} from "@/components/ui/sheet";
-+import { Chip } from "./ui-bits";
-+
-+interface ActivitySheetProps {
-+  session: ReturnType<typeof useOperatorSession>;
-+  open: boolean;
-+  onOpenChange: (open: boolean) => void;
-+}
-+
-+export function ActivitySheet({ session, open, onOpenChange }: ActivitySheetProps) {
-+  const store = session.store;
-+  const entries = activityEntries(store);
-+  const removed = store.archivedEvidence;
-+
-+  return (
-+    <Sheet open={open} onOpenChange={onOpenChange}>
-+      <SheetContent
-+        side="right"
-+        className="w-full overflow-y-auto sm:max-w-md"
-+      >
-+        <SheetHeader>
-+          <SheetTitle className="flex items-center gap-2">
-+            <History className="size-4" aria-hidden />
-+            Activity
-+          </SheetTitle>
-+          <SheetDescription>
-+            Recent updates, document confirmations and sign-offs, in order.
-+          </SheetDescription>
-+        </SheetHeader>
-+
-+        <div className="mt-4 space-y-4">
-+          {entries.length === 0 ? (
-+            <p className="text-[12px] text-muted-foreground">Nothing has happened yet.</p>
-+          ) : (
-+            <ol className="relative space-y-3 border-l border-border/70 pl-4">
-+              {entries.map((entry) => (
-+                <li key={entry.key} className="relative">
-+                  <span
-+                    className="absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-background bg-primary"
-+                    aria-hidden
-+                  />
-+                  <p className="text-[12px] font-medium leading-5">{entry.title}</p>
-+                  <p className="text-[10.5px] leading-5 text-muted-foreground">{entry.detail}</p>
-+                  {entry.scope && entry.scope.length > 0 && (
-+                    <div className="mt-1">
-+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-+                        Recorded scope
-+                      </p>
-+                      <p className="text-[10px] leading-4 text-muted-foreground">
-+                        {entry.scope.join(" · ")}
-+                      </p>
-+                      <Chip tone={entry.currentness === "current" ? "success" : "neutral"}>
-+                        {entry.currentness === "current" ? "Still applies" : "Earlier sign-off"}
-+                      </Chip>
-+                    </div>
-+                  )}
-+                </li>
-+              ))}
-+            </ol>
-+          )}
-+
-+          {removed.length > 0 && (
-+            <section className="border-t border-border/60 pt-3">
-+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-+                Removed from the plan
-+              </p>
-+              <ul className="mt-1.5 space-y-2">
-+                {removed.map((entry) => (
-+                  <li key={entry.evidence.id} className="rounded-md border border-border/60 px-2.5 py-2">
-+                    <div className="flex flex-wrap items-center gap-1.5">
-+                      <p className="text-[11.5px] font-medium">
-+                        {sourceAttribution(entry.evidence)}
-+                      </p>
-+                      <Chip tone="neutral">kept for reference</Chip>
-+                    </div>
-+                    <p className="mt-0.5 line-clamp-2 text-[10.5px] italic leading-4 text-muted-foreground">
-+                      “{entry.evidence.sourceExcerpt}”
-+                    </p>
-+                    <p className="mt-0.5 text-[9.5px] text-muted-foreground">
-+                      Received {formatDate(entry.evidence.observedAt)}
-+                    </p>
-+                  </li>
-+                ))}
-+              </ul>
-+            </section>
-+          )}
-+        </div>
-+      </SheetContent>
-+    </Sheet>
-+  );
-+}
 diff --git a/app/src/components/oncuex/brief-review-dialog.tsx b/app/src/components/oncuex/brief-review-dialog.tsx
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/brief-review-dialog.tsx
-@@ -0,0 +1,433 @@
+@@ -0,0 +1,421 @@
 +import { useMemo, useState } from "react";
 +import { ArrowRight, CheckCircle2, FileText, Loader2, Sparkles } from "lucide-react";
 +
@@ -5938,7 +5831,6 @@ new file mode 100644
 +import { Textarea } from "@/components/ui/textarea";
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
 +import {
-+  type AiRun,
 +  type BriefProposal,
 +  callOncuexAI,
 +  validateBriefProposal,
@@ -6007,7 +5899,6 @@ new file mode 100644
 +  const [form, setForm] = useState<FormState>(emptyForm);
 +  const [loading, setLoading] = useState(false);
 +  const [error, setError] = useState<string | null>(null);
-+  const [run, setRun] = useState<AiRun | null>(null);
 +  const [reviewedWithoutSpans, setReviewedWithoutSpans] = useState(false);
 +
 +  const missingSpans = useMemo(() => {
@@ -6045,19 +5936,16 @@ new file mode 100644
 +    setLoading(false);
 +    if (!result.ok) {
 +      setError(result.error);
-+      setRun(result.run);
 +      return;
 +    }
 +    const valid = validateBriefProposal(result.data);
 +    if (!valid.ok) {
 +      setError(valid.error);
-+      setRun(result.run);
 +      return;
 +    }
 +    setProposal(valid.proposal);
 +    setForm(fromProposal(valid.proposal));
 +    setMode("ai");
-+    setRun(result.run);
 +    setReviewedWithoutSpans(false);
 +  };
 +
@@ -6071,13 +5959,12 @@ new file mode 100644
 +      timezone: BRIEF.timezone,
 +      openQuestions: BRIEF.openQuestions,
 +      sourceSpans: [],
-+      uncertainties: ["Manual sample values, not a model extraction."],
++      uncertainties: ["These are the prepared sample details, typed by you."],
 +      questions: [],
 +    };
 +    setProposal(manual);
 +    setForm(fromProposal(manual));
 +    setMode("manual");
-+    setRun(null);
 +    setError(null);
 +    setReviewedWithoutSpans(true);
 +  };
@@ -6121,8 +6008,8 @@ new file mode 100644
 +            Review the client brief
 +          </DialogTitle>
 +          <DialogDescription>
-+            Extract the facts from the brief, check every value against its source, then adopt
-+            the brief. The proposal is not project data until you adopt it.
++            Here is what we read from the brief. Check the details against the source before they
++            go into the plan.
 +          </DialogDescription>
 +        </DialogHeader>
 +
@@ -6138,26 +6025,19 @@ new file mode 100644
 +              ) : (
 +                <Sparkles className="size-3.5" />
 +              )}
-+              {mode === "ai" ? "Extract again" : "Extract with AI"}
++              {mode === "ai" ? "Read it again" : "Read the brief"}
 +            </Button>
-+            {mode === "ai" && <Chip tone="success">AI proposal</Chip>}
-+            {mode === "manual" && <Chip tone="neutral">Manual sample</Chip>}
++            {mode === "ai" && <Chip tone="success">Read from the brief</Chip>}
++            {mode === "manual" && <Chip tone="neutral">Typed by you</Chip>}
 +            <Button size="sm" variant="ghost" onClick={useManualSample} disabled={loading}>
-+              Use the prepared sample manually
++              Fill it in myself
 +            </Button>
 +          </div>
 +
-+          {run && (
-+            <p className="text-[10.5px] text-muted-foreground">
-+              AI response · {run.durationMs} ms ·{" "}
-+              {run.responseId ? `reference ${run.responseId}` : run.detail}
-+            </p>
-+          )}
-+
 +          {error && (
 +            <Note tone="danger" icon={FileText}>
-+              <span className="font-medium">AI extraction unavailable.</span> {error} You can enter
-+              the brief manually or use the prepared sample, clearly labelled.
++              <span className="font-medium">We couldn’t read the brief automatically.</span>{" "}
++              {error} You can type the details in yourself or use the prepared sample.
 +            </Note>
 +          )}
 +
@@ -6220,7 +6100,7 @@ new file mode 100644
 +                    onChange={(event) => update("timezone", event.target.value)}
 +                  />
 +                  <p className="text-[10px] text-muted-foreground">
-+                    Internal setting, not extracted from the brief.
++                    We set this for the sample. Edit it if needed.
 +                  </p>
 +                </div>
 +              </div>
@@ -6256,17 +6136,19 @@ new file mode 100644
 +                    value={form.circulationBuffer}
 +                    onChange={(event) => update("circulationBuffer", event.target.value)}
 +                  />
-+                  <p className="text-[10px] text-muted-foreground">Internal planning setting.</p>
++                  <p className="text-[10px] text-muted-foreground">
++                    We set this for the sample.
++                  </p>
 +                </div>
 +                <p className="self-end text-[10.5px] text-muted-foreground">
-+                  Event lead {BRIEF.owner.name} · fixed sample role, not extracted.
++                  {BRIEF.owner.name} is the event lead on this sample.
 +                </p>
 +              </div>
 +
 +              {proposal.uncertainties.length > 0 && (
 +                <div className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2">
 +                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warning">
-+                    Uncertainties
++                    Still unclear
 +                  </p>
 +                  <ul className="mt-0.5 space-y-0.5">
 +                    {proposal.uncertainties.map((entry) => (
@@ -6281,7 +6163,7 @@ new file mode 100644
 +              {proposal.questions.length > 0 && (
 +                <div className="rounded-lg border border-border/60 px-3 py-2">
 +                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-+                    Questions to confirm
++                    Worth checking with the client
 +                  </p>
 +                  <ul className="mt-0.5 space-y-0.5">
 +                    {proposal.questions.map((entry) => (
@@ -6296,7 +6178,7 @@ new file mode 100644
 +              {proposal.sourceSpans.length > 0 && (
 +                <div className="space-y-1">
 +                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-+                    Source spans
++                    Where this came from
 +                  </p>
 +                  <ul className="space-y-1">
 +                    {proposal.sourceSpans.map((span) => (
@@ -6320,8 +6202,8 @@ new file mode 100644
 +                    className="mt-0.5"
 +                  />
 +                  <span>
-+                    I reviewed the values without a supporting quote ({missingSpans.join(", ")})
-+                    and corrected anything that was not stated.
++                    I checked these myself because the brief doesn’t quote them (
++                    {missingSpans.join(", ")}).
 +                  </span>
 +                </label>
 +              )}
@@ -6333,9 +6215,8 @@ new file mode 100644
 +              )}
 +
 +              <Note tone="neutral" icon={CheckCircle2}>
-+                Adopting the brief and adding the prepared sample documents uses the same commands
-+                as the rest of the binder. The documents are prepared sample files, not live
-+                partner confirmations.
++                Using this brief adds it to the plan and attaches the sample paperwork. The
++                paperwork is prepared for the sample, not a live partner confirmation.
 +              </Note>
 +            </div>
 +          )}
@@ -6346,7 +6227,7 @@ new file mode 100644
 +            Cancel
 +          </Button>
 +          <Button size="sm" className="gap-1.5" disabled={!proposal || !canAdopt} onClick={adopt}>
-+            Adopt brief and add sample documents
++            Use this brief and add the sample paperwork
 +            <ArrowRight className="size-3.5" />
 +          </Button>
 +        </DialogFooter>
@@ -6358,13 +6239,17 @@ diff --git a/app/src/components/oncuex/budget-view.tsx b/app/src/components/oncu
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/budget-view.tsx
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,236 @@
 +import { Button } from "@/components/ui/button";
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
 +import { PM_ACTOR, reviewEvidence } from "@/oncuex/demo";
 +import { BRIEF, sourceAttribution } from "@/oncuex/scenario";
 +import { formatDate, formatMoney } from "@/oncuex/format";
-+import { sourceState, sourceStateLabel } from "@/oncuex/presentation";
++import {
++  isSuperseded,
++  sourceState,
++  sourceStateLabel,
++} from "@/oncuex/presentation";
 +import type { Brief, EvidenceRecord } from "@/oncuex/types";
 +import { AlertTriangle, Wallet } from "lucide-react";
 +import { cn } from "@/lib/utils";
@@ -6419,8 +6304,8 @@ new file mode 100644
 +    session.apply(sourceAttribution(record), (current) => {
 +      reviewEvidence(current, record.id, disposition, "project_manager", PM_ACTOR);
 +      return disposition === "accepted"
-+        ? "The budget document is reviewed and current."
-+        : "The budget document is marked as needing a new version. No message was sent.";
++        ? "Marked as current."
++        : "Marked for a new version. Nothing was sent.";
 +    });
 +  };
 +
@@ -6520,34 +6405,42 @@ new file mode 100644
 +          <ul className="space-y-2">
 +            {budgetDocuments.map((record) => {
 +              const state = sourceState(record, snapshot, store.now());
++              const superseded = isSuperseded(record, budgetDocuments, snapshot, store.now());
 +              return (
 +                <li key={record.id} className="rounded-lg border border-border/60 px-3 py-2">
 +                  <div className="flex flex-wrap items-center justify-between gap-2">
 +                    <p className="text-[12px] font-medium">{sourceAttribution(record)}</p>
 +                    <div className="flex items-center gap-1">
-+                      <Chip tone={state === "confirmed" ? "success" : "warning"}>
-+                        {sourceStateLabel(state)}
++                      <Chip
++                        tone={
++                          state === "confirmed" ? "success" : superseded ? "neutral" : "warning"
++                        }
++                      >
++                        {superseded ? "Replaced" : sourceStateLabel(state)}
 +                      </Chip>
-+                      {state === "review" && (
++                      {superseded && (
++                        <span className="text-[10px] text-muted-foreground">Kept for reference</span>
++                      )}
++                      {!superseded && state === "review" && (
 +                        <Button
 +                          size="sm"
 +                          className="h-6 px-2 text-[10px]"
 +                          onClick={() => review(record, "accepted")}
 +                        >
-+                          Mark reviewed
++                          Looks right
 +                        </Button>
 +                      )}
-+                      {state === "update" && (
++                      {!superseded && state === "update" && (
 +                        <Button
 +                          size="sm"
 +                          variant="outline"
 +                          className="h-6 px-2 text-[10px]"
 +                          onClick={() => review(record, "rejected")}
 +                        >
-+                          Mark for a new version
++                          Needs a new version
 +                        </Button>
 +                      )}
-+                      {state === "confirmed" && (
++                      {!superseded && state === "confirmed" && (
 +                        <Button
 +                          size="sm"
 +                          variant="ghost"
@@ -6587,7 +6480,7 @@ diff --git a/app/src/components/oncuex/checklist-view.tsx b/app/src/components/o
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/checklist-view.tsx
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,251 @@
 +import { Button } from "@/components/ui/button";
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
 +import { BRIEF, PEOPLE, REQUIREMENTS, sourceAttribution } from "@/oncuex/scenario";
@@ -6669,10 +6562,10 @@ new file mode 100644
 +        id="checklist-support"
 +        eyebrow="Checklist"
 +        title="The work behind the launch"
-+        description="The work the launch needs, grouped by work area. A row shows whether its supporting checks pass, not whether the real-world task is complete. Open a row for its documents and findings."
++        description="The work the launch needs, grouped by area. Open a row for the paperwork behind it."
 +        actions={
 +          <span className="text-[11.5px] text-muted-foreground">
-+            {done} of {total} supporting checks pass
++            {done} of {total} checks pass
 +          </span>
 +        }
 +      >
@@ -6700,7 +6593,7 @@ new file mode 100644
 +                <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-1">
 +                  <h3 className="text-[14px] font-semibold">{area.label}</h3>
 +                  <span className="text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
-+                    {areaDone}/{areaRequirements.length} supporting checks
++                    {areaDone}/{areaRequirements.length} checks
 +                  </span>
 +                </div>
 +
@@ -6722,9 +6615,18 @@ new file mode 100644
 +                    const documents = store.evidence.filter(
 +                      (record) => record.requirementId === requirement.id,
 +                    );
-+                    const currentDocuments = documents.filter(
++                    const activeDocuments = documents.filter(
 +                      (record) => sourceState(record, snapshot, store.now()) !== "unused",
 +                    );
++                    const hasCurrent = activeDocuments.some(
++                      (record) => sourceState(record, snapshot, store.now()) === "confirmed",
++                    );
++                    const currentDocuments = hasCurrent
++                      ? activeDocuments.filter(
++                          (record) => sourceState(record, snapshot, store.now()) !== "update",
++                        )
++                      : activeDocuments;
++                    const earlierDocuments = activeDocuments.length - currentDocuments.length;
 +                    return (
 +                      <li
 +                        key={requirement.id}
@@ -6778,7 +6680,7 @@ new file mode 100644
 +
 +                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground">
 +                            {currentDocuments.length === 0 ? (
-+                              <span>No document yet</span>
++                              <span>No paperwork yet</span>
 +                            ) : (
 +                              currentDocuments.map((record) => {
 +                                const source = sourceState(record, snapshot, store.now());
@@ -6791,6 +6693,12 @@ new file mode 100644
 +                                  </span>
 +                                );
 +                              })
++                            )}
++                            {earlierDocuments > 0 && (
++                              <span>
++                                {earlierDocuments} earlier version
++                                {earlierDocuments === 1 ? "" : "s"} kept for reference
++                              </span>
 +                            )}
 +                          </div>
 +                        </div>
@@ -6816,8 +6724,8 @@ new file mode 100644
 +            Open the partners
 +            <ArrowRight className="size-3.5" />
 +          </Button>
-+          <Button size="sm" variant="ghost" onClick={() => onOpenTab("timeline")}>
-+            See the day timeline
++          <Button size="sm" variant="ghost" onClick={() => onOpenTab("itinerary")}>
++            See the itinerary
 +          </Button>
 +        </div>
 +      </Panel>
@@ -6828,7 +6736,7 @@ diff --git a/app/src/components/oncuex/client-update-dialog.tsx b/app/src/compon
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/client-update-dialog.tsx
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,273 @@
 +import { useMemo, useState } from "react";
 +import { Copy, Download, Loader2, Sparkles } from "lucide-react";
 +
@@ -6843,11 +6751,11 @@ new file mode 100644
 +} from "@/components/ui/dialog";
 +import { Textarea } from "@/components/ui/textarea";
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
-+import { type AiRun, callOncuexAI } from "@/lib/ai-client";
-+import { BRIEF, PEOPLE, REQUIREMENTS } from "@/oncuex/scenario";
-+import { WORK_AREAS } from "@/oncuex/work-areas";
-+import { formatDate, formatMoney, residualText } from "@/oncuex/format";
-+import { checklistState, planExceptions, sourceState } from "@/oncuex/presentation";
++import { callOncuexAI } from "@/lib/ai-client";
++import { changeTitle } from "@/oncuex/demo";
++import { BRIEF, PEOPLE } from "@/oncuex/scenario";
++import { formatDate, formatMoney } from "@/oncuex/format";
++import { planExceptions } from "@/oncuex/presentation";
 +import type { Assessment, Brief } from "@/oncuex/types";
 +import { Chip, Note } from "./ui-bits";
 +
@@ -6868,7 +6776,6 @@ new file mode 100644
 +  const [mode, setMode] = useState<"ai" | "manual" | null>(null);
 +  const [loading, setLoading] = useState(false);
 +  const [error, setError] = useState<string | null>(null);
-+  const [run, setRun] = useState<AiRun | null>(null);
 +  const [copied, setCopied] = useState(false);
 +
 +  const store = session.store;
@@ -6880,9 +6787,10 @@ new file mode 100644
 +  const exceptions = briefReady && assessment
 +    ? planExceptions(snapshot, brief, assessment)
 +    : [];
-+  const documentsNeedingUpdate = store.evidence.filter(
-+    (record) => sourceState(record, snapshot, store.now()) === "update",
-+  ).length;
++  const lastChange = [...store.events]
++    .reverse()
++    .find((event) => event.eventType === "change.adopted");
++  const lastChangeId = String(lastChange?.payload?.changeId ?? "");
 +
 +  const draftWarnings = useMemo(() => {
 +    const warnings: string[] = [];
@@ -6901,7 +6809,10 @@ new file mode 100644
 +    ) {
 +      warnings.push("The draft claims a partner confirmation.");
 +    }
-+    if (/\b(booked|reserved|held for you|available|availability)\b/.test(lower)) {
++    if (
++      /\b(booked|reserved|held for you|availability)\b/.test(lower) ||
++      /\b(is|are|remains?|still)\s+available\b/.test(lower)
++    ) {
 +      warnings.push("The draft claims availability or a booking.");
 +    }
 +    return warnings;
@@ -6912,7 +6823,6 @@ new file mode 100644
 +      client: brief.client,
 +      project: brief.project,
 +      date: brief.eventDate,
-+      timezone: brief.timezone,
 +      guests: brief.guestCount,
 +      venue: snapshot.location.venueName,
 +      approvedBudget: formatMoney(brief.approvedBudget.minorUnits, brief.approvedBudget.currency),
@@ -6921,39 +6831,19 @@ new file mode 100644
 +        snapshot.budget.committedTotal.currency,
 +      ),
 +    },
-+    checklist: WORK_AREAS.map((area) => ({
-+      area: area.label,
-+      items: area.requirementIds
-+        .map((id) => REQUIREMENTS.find((requirement) => requirement.id === id))
-+        .filter(Boolean)
-+        .map((requirement) => {
-+          const result = assessment?.requirements.find(
-+            (candidate) => candidate.requirementId === requirement?.id,
-+          );
-+          const support = result ? checklistState(result) : null;
-+          return {
-+            task: requirement?.label,
-+            owner: requirement ? PEOPLE[requirement.owner] ?? "Unassigned" : "Unassigned",
-+            state: support
-+              ? {
-+                  status: support.label,
-+                  finding: support.detail,
-+                }
-+              : { status: "Not assessed", finding: "" },
-+          };
-+        }),
-+    })),
-+    exceptions: exceptions.map((exception) => `${exception.title}: ${exception.detail}`),
++    planSummary: !assessment
++      ? "The plan has not been checked yet."
++      : assessment.readiness === "ready_for_review"
++        ? "Everything currently lines up."
++        : "A few things are still being confirmed.",
++    signedOff: latestCurrent
++      ? `${PEOPLE[latest?.actor ?? ""] ?? "The event lead"} has approved the current plan.`
++      : latest
++        ? "The last approval no longer applies; this version needs another look."
++        : "The plan is not approved yet.",
++    recentUpdate: lastChangeId ? changeTitle(lastChangeId) : null,
++    stillToDo: exceptions.slice(0, 3).map((exception) => exception.title),
 +    openQuestions: brief.openQuestions,
-+    signOff: latest
-+      ? {
-+          status: latestCurrent
-+            ? "signed off and still applies"
-+            : "an earlier sign-off no longer applies to this version",
-+          by: PEOPLE[latest.actor] ?? "the event lead",
-+        }
-+      : "not signed off",
-+    documentsNeedingUpdate,
 +  };
 +
 +  const generate = async () => {
@@ -6964,7 +6854,6 @@ new file mode 100644
 +      project: projectState,
 +    });
 +    setLoading(false);
-+    setRun(result.run);
 +    if (!result.ok) {
 +      setError(result.error);
 +      return;
@@ -7021,10 +6910,10 @@ new file mode 100644
 +                ) : (
 +                  <Sparkles className="size-3.5" />
 +                )}
-+                {mode === "ai" ? "Draft again" : "Draft with AI"}
++                {mode === "ai" ? "Draft it again" : "Draft the update"}
 +              </Button>
-+              {mode === "ai" && <Chip tone="success">AI draft</Chip>}
-+              {mode === "manual" && <Chip tone="neutral">Manual draft</Chip>}
++              {mode === "ai" && <Chip tone="success">Draft ready</Chip>}
++              {mode === "manual" && <Chip tone="neutral">Written by you</Chip>}
 +              <Button
 +                size="sm"
 +                variant="ghost"
@@ -7034,16 +6923,9 @@ new file mode 100644
 +                  setError(null);
 +                }}
 +              >
-+                Write manually
++                Write it myself
 +              </Button>
 +            </div>
-+
-+            {run && (
-+              <p className="text-[10.5px] text-muted-foreground">
-+                AI response · {run.durationMs} ms ·{" "}
-+                {run.responseId ? `reference ${run.responseId}` : run.detail}
-+              </p>
-+            )}
 +
 +            {error && (
 +              <Note tone="danger">
@@ -7053,13 +6935,21 @@ new file mode 100644
 +            )}
 +
 +            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-[11.5px] leading-5">
-+              <p className="font-medium">Before you share</p>
-+              <p className="text-muted-foreground">
-+                Sign-off: {projectState.signOff.status}. Open questions:{" "}
-+                {brief.openQuestions.length}. Documents needing an update:{" "}
-+                {documentsNeedingUpdate}. The draft must not claim a partner confirmed a document,
-+                or that the plan is signed off, unless that is true above.
-+              </p>
++              <p className="font-medium">Before this goes out</p>
++              <ul className="mt-1 space-y-0.5 text-muted-foreground">
++                <li>
++                  {latestCurrent
++                    ? "The current plan is approved."
++                    : "The plan is not approved yet."}
++                </li>
++                {brief.openQuestions.length > 0 && (
++                  <li>
++                    {brief.openQuestions.length} client question
++                    {brief.openQuestions.length === 1 ? " is" : "s are"} still open.
++                  </li>
++                )}
++                <li>Nothing sends from here. You copy or download it.</li>
++              </ul>
 +            </div>
 +
 +            <Textarea
@@ -7068,15 +6958,16 @@ new file mode 100644
 +              onChange={(event) => setDraft(event.target.value)}
 +              placeholder={
 +                mode === "manual"
-+                  ? "Write the client update here. Use only what is recorded in the plan."
-+                  : "Draft with AI, then edit every sentence before sharing."
++                  ? "Write the update in your own words. Stick to what the plan says."
++                  : "Draft the update, then make it sound like you before you send it."
 +              }
 +              className="font-sans text-[12.5px] leading-6"
 +            />
 +
 +            {draftWarnings.length > 0 && (
 +              <Note tone="warning">
-+                <span className="font-medium">Review before sharing.</span>
++                <span className="font-medium">This may overstate what we know.</span> Edit these
++                lines before sending:
 +                <ul className="mt-1 list-disc pl-4">
 +                  {draftWarnings.map((warning) => (
 +                    <li key={warning}>{warning}</li>
@@ -7085,10 +6976,9 @@ new file mode 100644
 +              </Note>
 +            )}
 +
-+            <Note tone="neutral">
-+              This draft is unsent. Downloading or copying it is a manual handoff to your own email
-+              or client channel; OnCueX does not send it.
-+            </Note>
++            <p className="text-[10.5px] text-muted-foreground">
++              This is a draft. Send it your own way when it sounds right.
++            </p>
 +          </div>
 +        )}
 +
@@ -7104,7 +6994,7 @@ new file mode 100644
 +            onClick={copy}
 +          >
 +            <Copy className="size-3.5" />
-+            {copied ? "Copied" : "Copy draft"}
++            {copied ? "Copied" : "Copy"}
 +          </Button>
 +          <Button
 +            size="sm"
@@ -7113,7 +7003,7 @@ new file mode 100644
 +            onClick={download}
 +          >
 +            <Download className="size-3.5" />
-+            Download draft
++            Download
 +          </Button>
 +        </DialogFooter>
 +      </DialogContent>
@@ -7124,7 +7014,7 @@ diff --git a/app/src/components/oncuex/event-view.tsx b/app/src/components/oncue
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/event-view.tsx
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,409 @@
 +import {
 +  AlertTriangle,
 +  ArrowRight,
@@ -7138,7 +7028,7 @@ new file mode 100644
 +
 +import { Button } from "@/components/ui/button";
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
-+import { activityEntries } from "@/oncuex/activity";
++import { timelineEntries } from "@/oncuex/timeline";
 +import { changeTitle } from "@/oncuex/demo";
 +import { BRIEF, CONTRIBUTORS, PEOPLE, REQUIREMENTS } from "@/oncuex/scenario";
 +import {
@@ -7157,7 +7047,7 @@ new file mode 100644
 +  assessment: Assessment | null;
 +  onOpenTab: (tab: string) => void;
 +  onStartSample: () => void;
-+  onOpenActivity: () => void;
++  onOpenTimeline: () => void;
 +  onOpenSignOff: () => void;
 +  onReviewBrief: () => void;
 +  onOpenClientUpdate: () => void;
@@ -7169,7 +7059,7 @@ new file mode 100644
 +  assessment,
 +  onOpenTab,
 +  onStartSample,
-+  onOpenActivity,
++  onOpenTimeline,
 +  onOpenSignOff,
 +  onReviewBrief,
 +  onOpenClientUpdate,
@@ -7187,10 +7077,13 @@ new file mode 100644
 +  const open = (assessment?.requirements ?? []).filter(
 +    (result) => result.status !== "supported",
 +  );
++  const supportingPass = (assessment?.requirements ?? []).filter(
++    (result) => result.status === "supported",
++  ).length;
 +  const exceptions = briefReady && assessment
 +    ? planExceptions(snapshot, brief, assessment)
 +    : [];
-+  const activity = activityEntries(store).slice(0, 3);
++  const recent = timelineEntries(store).slice(0, 3);
 +  const days = daysToEvent(store.now(), brief.eventDate);
 +
 +  const approved = brief.approvedBudget.minorUnits;
@@ -7280,10 +7173,12 @@ new file mode 100644
 +          </p>
 +          <p className="text-[10px] text-muted-foreground">
 +            {!briefReady || !assessment
-+              ? "Plan not assessed"
-+              : `${counts.confirmed} of ${assessment.requirements.length} supporting checks pass · ${
-+                  latestCurrent ? "signed off" : "not signed off"
-+                }`}
++              ? "Plan not checked yet"
++              : `${
++                  supportingPass === assessment.requirements.length
++                    ? "Everything checks out"
++                    : `${assessment.requirements.length - supportingPass} things to look at`
++                } · ${latestCurrent ? "signed off" : "not signed off yet"}`}
 +          </p>
 +
 +          {lastChange && (
@@ -7293,7 +7188,7 @@ new file mode 100644
 +                {changeTitle(lastChangeId)}
 +                {open.length > 0
 +                  ? ` · ${open.length} checklist item${open.length === 1 ? "" : "s"} need an update.`
-+                  : " · the supporting checks reflect the change."}
++                  : " · the plan reflects the change."}
 +              </span>
 +              <button
 +                type="button"
@@ -7307,7 +7202,7 @@ new file mode 100644
 +
 +          {!latestCurrent && latest && open.length === 0 && (
 +            <p className="text-[11px] text-muted-foreground">
-+              Earlier sign-off saved; this version needs review. Sign off is available in the header.
++              The last sign-off is saved, but this version needs another look. Sign off is in the header.
 +            </p>
 +          )}
 +        </div>
@@ -7323,7 +7218,7 @@ new file mode 100644
 +                ? "Start the sample event to open the launch and its checklist."
 +                : open.length
 +                  ? "The first few checklist items that are not yet settled."
-+                  : "The checklist is clear. These are the open questions from the brief before sign-off."
++                  : "Everything checks out. These are the questions still open with the client."
 +            }
 +            actions={
 +              open.length ? (
@@ -7342,13 +7237,13 @@ new file mode 100644
 +            {!briefReady ? (
 +              <div className="space-y-3">
 +                <p className="text-[12.5px] leading-5 text-muted-foreground">
-+                  Review the client brief, check the extracted facts against their source text, then
-+                  adopt the brief and add the prepared documents. The documents are sample files,
-+                  not live partner confirmations.
++                  Read the client brief, check the details against what the client sent, then add
++                  them to the plan. The attached paperwork is sample material, not a live partner
++                  confirmation.
 +                </p>
 +                <div className="flex flex-wrap gap-2">
 +                  <Button size="sm" onClick={onReviewBrief} className="gap-1.5">
-+                    Review the brief with AI
++                    Review the brief
 +                    <ArrowRight className="size-3.5" />
 +                  </Button>
 +                  <Button size="sm" variant="outline" onClick={onStartSample}>
@@ -7358,7 +7253,7 @@ new file mode 100644
 +              </div>
 +            ) : !assessment ? (
 +              <p className="text-[12.5px] leading-5 text-muted-foreground">
-+                The plan could not be read. Reload the sample plan from Settings.
++                We couldn’t read the plan just now. Reload the sample from Settings.
 +              </p>
 +            ) : nextTasks.length > 0 ? (
 +              <ul className="space-y-1.5">
@@ -7401,16 +7296,16 @@ new file mode 100644
 +            ) : latestCurrent ? (
 +              <div className="space-y-2">
 +                <p className="text-[12.5px] leading-5 text-muted-foreground">
-+                  The plan is signed off. The details are in Activity.
++                  The plan is signed off. The details are in the Timeline.
 +                </p>
-+                <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenActivity}>
-+                  See activity
++                <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenTimeline}>
++                  See timeline
 +                </Button>
 +              </div>
 +            ) : (
 +              <div className="space-y-2">
 +                <p className="text-[12.5px] leading-5 text-muted-foreground">
-+                  The supporting checks pass and the open questions are settled. Next: sign off the plan.
++                  Everything checks out and the questions are settled. Ready to sign off?
 +                </p>
 +                <Button size="sm" className="gap-1.5" onClick={onOpenSignOff}>
 +                  Sign off the plan
@@ -7499,23 +7394,23 @@ new file mode 100644
 +          </Panel>
 +
 +          <Panel
-+            eyebrow="Activity"
-+            title="What just happened"
++            eyebrow="Latest updates"
++            title="Recently"
 +            actions={
 +              <button
 +                type="button"
-+                onClick={onOpenActivity}
++                onClick={onOpenTimeline}
 +                className="text-[10.5px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
 +              >
 +                See all
 +              </button>
 +            }
 +          >
-+            {activity.length === 0 ? (
++            {recent.length === 0 ? (
 +              <p className="text-[11.5px] text-muted-foreground">Nothing yet.</p>
 +            ) : (
 +              <ul className="space-y-2">
-+                {activity.map((entry) => (
++                {recent.map((entry) => (
 +                  <li key={entry.key}>
 +                    <p className="text-[11.5px] font-medium leading-5">{entry.title}</p>
 +                    <p className="text-[10px] text-muted-foreground">{entry.detail}</p>
@@ -7544,7 +7439,7 @@ new file mode 100644
 +interface HeaderProps {
 +  session: ReturnType<typeof useOperatorSession>;
 +  onOpenSignOff: () => void;
-+  onOpenActivity: () => void;
++  onOpenTimeline: () => void;
 +  onReloadSample: () => void;
 +  theme: "light" | "dark";
 +  onToggleTheme: () => void;
@@ -7553,7 +7448,7 @@ new file mode 100644
 +export function Header({
 +  session,
 +  onOpenSignOff,
-+  onOpenActivity,
++  onOpenTimeline,
 +  onReloadSample,
 +  theme,
 +  onToggleTheme,
@@ -7597,10 +7492,10 @@ new file mode 100644
 +            variant="ghost"
 +            size="sm"
 +            className="h-8 gap-1.5 px-2 text-[11.5px]"
-+            onClick={onOpenActivity}
++            onClick={onOpenTimeline}
 +          >
 +            <History className="size-3.5" />
-+            <span className="hidden sm:inline">Activity</span>
++            <span className="hidden sm:inline">Timeline</span>
 +          </Button>
 +          <SettingsDialog session={session} onReloadSample={onReloadSample} />
 +          <Button
@@ -7617,11 +7512,195 @@ new file mode 100644
 +    </header>
 +  );
 +}
+diff --git a/app/src/components/oncuex/itinerary-view.tsx b/app/src/components/oncuex/itinerary-view.tsx
+new file mode 100644
+--- /dev/null
++++ b/app/src/components/oncuex/itinerary-view.tsx
+@@ -0,0 +1,179 @@
++import { Button } from "@/components/ui/button";
++import type { useOperatorSession } from "@/hooks/use-operator-session";
++import { minutes } from "@/oncuex/engine";
++import { BRIEF, REQUIREMENTS } from "@/oncuex/scenario";
++import { formatDate } from "@/oncuex/format";
++import type { Brief } from "@/oncuex/types";
++import { AlertTriangle, CalendarDays, Clock3 } from "lucide-react";
++import { EmptyState, Panel } from "./ui-bits";
++
++interface ItineraryViewProps {
++  session: ReturnType<typeof useOperatorSession>;
++  onStartSample: () => void;
++  onOpenTab: (tab: string) => void;
++}
++
++interface TimelineEntry {
++  id: string;
++  time: string;
++  label: string;
++  detail: string;
++  note?: string;
++}
++
++const clock = (total: number) =>
++  `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
++
++export function ItineraryView({ session, onStartSample, onOpenTab }: ItineraryViewProps) {
++  const store = session.store;
++  const snapshot = store.snapshot();
++  const briefReady = Boolean((snapshot.brief as { client?: string }).client);
++  const brief: Brief = briefReady ? (snapshot.brief as Brief) : BRIEF;
++
++  if (!briefReady) {
++    return (
++      <Panel eyebrow="Itinerary" title="The itinerary starts with the event">
++        <EmptyState
++          icon={CalendarDays}
++          title="No event day yet"
++          description="Start the sample event to bring in the venue access, crew call, run of show and hard stop for the Northwind launch."
++          action={
++            <Button size="sm" onClick={onStartSample}>
++              Start with the sample event
++            </Button>
++          }
++        />
++      </Panel>
++    );
++  }
++
++  const setup =
++    (REQUIREMENTS.find((requirement) => requirement.id === "REQ-venue-loading-1")
++      ?.expectedValues?.setupMinutes as number | undefined) ?? 45;
++  const margin =
++    (REQUIREMENTS.find((requirement) => requirement.id === "REQ-production-runofshow-1")
++      ?.expectedValues?.marginMinutes as number | undefined) ?? 30;
++
++  const accessOpen = minutes(snapshot.location.loadingWindow.start);
++  const accessClose = minutes(snapshot.location.loadingWindow.end);
++  const crewCall = minutes(snapshot.crew.arrivalTime);
++  const setupDone = crewCall + setup;
++  const showEnd = minutes(snapshot.production.runOfShowEnd);
++  const hardStop = minutes(snapshot.location.hardStop);
++
++  const entries: TimelineEntry[] = [
++    {
++      id: "timeline-access-open",
++      time: snapshot.location.loadingWindow.start,
++      label: "Access opens",
++      detail: `${snapshot.location.venueName} freight access begins.`,
++      note:
++        crewCall < accessOpen
++          ? `The crew is due at ${snapshot.crew.arrivalTime}, before access opens.`
++          : undefined,
++    },
++    {
++      id: "timeline-access-close",
++      time: snapshot.location.loadingWindow.end,
++      label: "Access closes",
++      detail: "Freight access ends for the venue.",
++    },
++    {
++      id: "timeline-crew-call",
++      time: snapshot.crew.arrivalTime,
++      label: "Crew call",
++      detail: "Crew arrives on site and starts the build.",
++    },
++    {
++      id: "timeline-setup",
++      time: clock(setupDone),
++      label: "Setup complete",
++      detail: `${setup} minutes after the crew call.`,
++      note:
++        setupDone > accessClose
++          ? `Setup runs ${setupDone - accessClose} minutes past the ${snapshot.location.loadingWindow.end} access close.`
++          : undefined,
++    },
++    {
++      id: "timeline-photo-start",
++      time: snapshot.photographer.arrivalWindow.start,
++      label: "Photography begins",
++      detail: `Coverage until ${snapshot.photographer.arrivalWindow.end}.`,
++    },
++    {
++      id: "timeline-photo-end",
++      time: snapshot.photographer.arrivalWindow.end,
++      label: "Photography ends",
++      detail: `${snapshot.photographer.deliverables.editedImages} edited images to follow within ${snapshot.photographer.deliverables.deliveryDays} days.`,
++    },
++    {
++      id: "timeline-runofshow",
++      time: snapshot.production.runOfShowEnd,
++      label: "Run of show ends",
++      detail: "The programme finishes for the evening.",
++      note:
++        showEnd + margin > hardStop
++          ? `With a ${margin} minute margin the room is needed until ${clock(
++              showEnd + margin,
++            )}, after the ${snapshot.location.hardStop} hard stop.`
++          : undefined,
++    },
++    {
++      id: "timeline-hard-stop",
++      time: snapshot.location.hardStop,
++      label: "Hard stop",
++      detail: "The venue must be clear.",
++    },
++  ]
++    .filter((entry) => Number.isFinite(minutes(entry.time as string)))
++    .sort((left, right) => minutes(left.time) - minutes(right.time));
++
++  return (
++    <div className="space-y-4">
++      <Panel
++        eyebrow="Itinerary"
++        title={`${formatDate(brief.eventDate)} · ${snapshot.location.venueName}`}
++        description="The current running order for the event day."
++        actions={
++          <Button size="sm" variant="ghost" onClick={() => onOpenTab("checklist")}>
++            Open the checklist
++          </Button>
++        }
++      >
++        <ol className="relative space-y-4 border-l border-border/70 pl-5">
++          {entries.map((entry) => (
++            <li id={entry.id} key={`${entry.time}-${entry.label}`} className="relative">
++              <span
++                className={`absolute -left-[27px] top-1 flex size-3.5 items-center justify-center rounded-full border-2 border-background ${
++                  entry.note ? "bg-warning" : "bg-primary"
++                }`}
++                aria-hidden
++              />
++              <div className="flex flex-wrap items-baseline gap-x-2">
++                <span className="tnum text-[12px] font-semibold">{entry.time}</span>
++                <p className="text-[13px] font-medium">{entry.label}</p>
++              </div>
++              <p className="text-[11.5px] leading-5 text-muted-foreground">{entry.detail}</p>
++              {entry.note && (
++                <p className="mt-1 flex items-start gap-1.5 rounded-md border border-warning/25 bg-warning/5 px-2 py-1 text-[11px] leading-5 text-warning">
++                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
++                  {entry.note}
++                </p>
++              )}
++            </li>
++          ))}
++        </ol>
++
++        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
++          <Button size="sm" variant="outline" onClick={() => onOpenTab("partners")}>
++            <Clock3 className="size-3.5" />
++            See the partners
++          </Button>
++          <Button size="sm" variant="ghost" onClick={() => onOpenTab("budget")}>
++            Check the budget
++          </Button>
++        </div>
++      </Panel>
++    </div>
++  );
++}
 diff --git a/app/src/components/oncuex/partners-view.tsx b/app/src/components/oncuex/partners-view.tsx
 new file mode 100644
 --- /dev/null
 +++ b/app/src/components/oncuex/partners-view.tsx
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,323 @@
 +import type { LucideIcon } from "lucide-react";
 +import { AlertTriangle, Building2, Camera, Clapperboard, FileText, Utensils } from "lucide-react";
 +
@@ -7631,6 +7710,7 @@ new file mode 100644
 +import { sourceAttribution } from "@/oncuex/scenario";
 +import { formatDate, formatMoney } from "@/oncuex/format";
 +import {
++  isSuperseded,
 +  requirementNote,
 +  sourceState,
 +  sourceStateLabel,
@@ -7727,8 +7807,8 @@ new file mode 100644
 +    session.apply(sourceAttribution(record), (current) => {
 +      reviewEvidence(current, record.id, disposition, "project_manager", PM_ACTOR);
 +      return disposition === "accepted"
-+        ? "The document is reviewed and current. The checklist and any sign-off will update."
-+        : "The document is marked as not used or needing a new version. No message was sent.";
++        ? "Marked as current. The checklist and any sign-off will update."
++        : "Marked for a new version. Nothing was sent.";
 +    });
 +  };
 +
@@ -7737,7 +7817,7 @@ new file mode 100644
 +      <Panel
 +        eyebrow="Partners"
 +        title="The people making the launch happen"
-+        description="Each partner, what they are providing, and the documents behind their work. A document is reviewed and current only while it still describes the plan."
++        description="The people making the launch happen, and the paperwork behind their work. It stays current only while it still matches the plan."
 +      >
 +        <div className="grid gap-3 lg:grid-cols-2">
 +          {partners.map((partner) => {
@@ -7824,6 +7904,7 @@ new file mode 100644
 +                  ) : (
 +                    documents.map((record) => {
 +                      const state = sourceState(record, snapshot, store.now());
++                      const superseded = isSuperseded(record, documents, snapshot, store.now());
 +                      const expired = record.expiresAt <= store.now();
 +                      return (
 +                        <div
@@ -7843,14 +7924,16 @@ new file mode 100644
 +                              tone={
 +                                state === "confirmed"
 +                                  ? "success"
-+                                  : state === "unused"
++                                  : state === "unused" || superseded
 +                                    ? "neutral"
 +                                    : "warning"
 +                              }
 +                            >
-+                              {expired
-+                                ? `Expired ${formatDate(record.expiresAt)}`
-+                                : sourceStateLabel(state)}
++                              {superseded
++                                ? "Replaced"
++                                : expired
++                                  ? `Expired ${formatDate(record.expiresAt)}`
++                                  : sourceStateLabel(state)}
 +                            </Chip>
 +                          </div>
 +                          <p className="mt-1 line-clamp-2 text-[10.5px] italic leading-4 text-muted-foreground">
@@ -7862,14 +7945,19 @@ new file mode 100644
 +                              {formatDate(record.expiresAt)}
 +                            </p>
 +                            <div className="flex gap-1">
-+                              {state === "review" && (
++                              {superseded && (
++                                <span className="self-center text-[9.5px] text-muted-foreground">
++                                  Kept for reference
++                                </span>
++                              )}
++                              {!superseded && state === "review" && (
 +                                <>
 +                                  <Button
 +                                    size="sm"
 +                                    className="h-6 px-2 text-[10px]"
 +                                    onClick={() => review(record, "accepted")}
 +                                  >
-+                                    Mark reviewed
++                                    Looks right
 +                                  </Button>
 +                                  <Button
 +                                    size="sm"
@@ -7881,17 +7969,17 @@ new file mode 100644
 +                                  </Button>
 +                                </>
 +                              )}
-+                              {state === "update" && (
++                              {!superseded && state === "update" && (
 +                                <Button
 +                                  size="sm"
 +                                  variant="outline"
 +                                  className="h-6 px-2 text-[10px]"
 +                                  onClick={() => review(record, "rejected")}
 +                                >
-+                                  Mark for a new version
++                                  Needs a new version
 +                                </Button>
 +                              )}
-+                              {state === "confirmed" && (
++                              {!superseded && state === "confirmed" && (
 +                                <Button
 +                                  size="sm"
 +                                  variant="ghost"
@@ -7901,7 +7989,7 @@ new file mode 100644
 +                                  Not used
 +                                </Button>
 +                              )}
-+                              {state === "unused" && !expired && (
++                              {!superseded && state === "unused" && !expired && (
 +                                <Button
 +                                  size="sm"
 +                                  variant="outline"
@@ -8052,8 +8140,8 @@ new file mode 100644
 +              Project data
 +            </h3>
 +            <p className="text-[12px] leading-5 text-muted-foreground">
-+              Lossless JSON for replay: current state, documents, removed documents, activity and
-+              sign-off scope. Restoring validates the whole export before replacing the open plan.
++              A complete copy of the plan: current state, paperwork, removed paperwork, timeline and
++              sign-off scope. Restoring checks the file before replacing what is open.
 +            </p>
 +            <div className="flex flex-wrap gap-2">
 +              <Button
@@ -8087,7 +8175,7 @@ new file mode 100644
 +              Export v{exportDoc.exportVersion} · {exportDoc.evidence.length} documents ·{" "}
 +              {exportDoc.archivedEvidence.length} kept for reference ·{" "}
 +              {exportDoc.decisions.length} sign-off{exportDoc.decisions.length === 1 ? "" : "s"} ·{" "}
-+              {exportDoc.events.length} activity entries
++              {exportDoc.events.length} timeline entries
 +            </p>
 +          </section>
 +
@@ -8181,8 +8269,8 @@ new file mode 100644
 +              </div>
 +
 +              <p className="text-[10px] text-muted-foreground">
-+                Record: {exportDoc.counters.sequence} activity entries · sign-off scope is preserved
-+                in Activity. The fixed Rowan role is simulated, not authenticated.
++                Record: {exportDoc.counters.sequence} timeline entries · sign-off scope is preserved
++                in the Timeline. The fixed Rowan role is simulated, not authenticated.
 +              </p>
 +            </div>
 +          </details>
@@ -8257,7 +8345,7 @@ new file mode 100644
 +  const signOff = () => {
 +    session.apply("Plan signed off", (current) => {
 +      recordAcceptance(current, nextDecisionId(current));
-+      return "The plan is signed off. The details are in Activity.";
++      return "The plan is signed off. The details are in the Timeline.";
 +    });
 +    onOpenChange(false);
 +  };
@@ -8277,21 +8365,21 @@ new file mode 100644
 +            {!briefReady
 +              ? "Review the client brief and open the plan first. Sign off will stay available here."
 +              : latestCurrent
-+                ? "The sign-off is recorded in Activity and still applies to this plan."
-+                : "A sign-off says the event lead is ready to stand behind this plan with the client."}
++                ? "The sign-off is recorded in the Timeline and still applies to this plan."
++                : "Signing off means you’re ready to stand behind this plan with the client."}
 +          </DialogDescription>
 +        </DialogHeader>
 +
 +        {latest && !latestCurrent && (
 +          <Note tone="warning" icon={ShieldCheck}>
-+            Earlier sign-off saved; this version needs review.
++            The last sign-off is saved, but this version needs another look.
 +          </Note>
 +        )}
 +
 +        {!briefReady ? (
 +          <Note tone="neutral">
-+            There is no adopted brief yet. Start with the client brief in Overview, then come back
-+            to sign off.
++            There’s no brief yet. Start with the client brief in Overview, then come back to sign
++            off.
 +          </Note>
 +        ) : !assessment ? (
 +          <p className="text-[12.5px] leading-5 text-muted-foreground">
@@ -8321,8 +8409,8 @@ new file mode 100644
 +        ) : ready ? (
 +          <div className="space-y-3">
 +            <Note tone="neutral" icon={ShieldCheck}>
-+              Required checks pass; not yet signed off. Sign off this plan when you are ready to
-+              share it with the client.
++              Everything checks out. Not signed off yet. When you’re ready to stand behind it with
++              the client, sign off here.
 +            </Note>
 +            <div className="grid gap-1.5 sm:grid-cols-2">
 +              {WORK_AREAS.map((area) => (
@@ -8351,7 +8439,7 @@ new file mode 100644
 +            )}
 +            <div className="text-[11px] text-muted-foreground">
 +              {brief.project} · {formatDate(brief.eventDate)} · {snapshot.location.venueName}
-+              {latest && " · earlier sign-off saved; this version needs review. Signing replaces it, and the earlier sign-off stays in Activity."}
++              {latest && " · the last sign-off is saved, but this version needs another look. Signing replaces it, and the old one stays in the Timeline."}
 +            </div>
 +          </div>
 +        ) : (
@@ -8393,188 +8481,111 @@ new file mode 100644
 +    </Dialog>
 +  );
 +}
-diff --git a/app/src/components/oncuex/timeline-view.tsx b/app/src/components/oncuex/timeline-view.tsx
+diff --git a/app/src/components/oncuex/timeline-sheet.tsx b/app/src/components/oncuex/timeline-sheet.tsx
 new file mode 100644
 --- /dev/null
-+++ b/app/src/components/oncuex/timeline-view.tsx
-@@ -0,0 +1,179 @@
-+import { Button } from "@/components/ui/button";
++++ b/app/src/components/oncuex/timeline-sheet.tsx
+@@ -0,0 +1,102 @@
 +import type { useOperatorSession } from "@/hooks/use-operator-session";
-+import { minutes } from "@/oncuex/engine";
-+import { BRIEF, REQUIREMENTS } from "@/oncuex/scenario";
++import { timelineEntries } from "@/oncuex/timeline";
++import { sourceAttribution } from "@/oncuex/scenario";
 +import { formatDate } from "@/oncuex/format";
-+import type { Brief } from "@/oncuex/types";
-+import { AlertTriangle, CalendarDays, Clock3 } from "lucide-react";
-+import { EmptyState, Panel } from "./ui-bits";
++import { History } from "lucide-react";
++import {
++  Sheet,
++  SheetContent,
++  SheetDescription,
++  SheetHeader,
++  SheetTitle,
++} from "@/components/ui/sheet";
++import { Chip } from "./ui-bits";
 +
-+interface TimelineViewProps {
++interface TimelineSheetProps {
 +  session: ReturnType<typeof useOperatorSession>;
-+  onStartSample: () => void;
-+  onOpenTab: (tab: string) => void;
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
 +}
 +
-+interface TimelineEntry {
-+  id: string;
-+  time: string;
-+  label: string;
-+  detail: string;
-+  note?: string;
-+}
-+
-+const clock = (total: number) =>
-+  `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-+
-+export function TimelineView({ session, onStartSample, onOpenTab }: TimelineViewProps) {
++export function TimelineSheet({ session, open, onOpenChange }: TimelineSheetProps) {
 +  const store = session.store;
-+  const snapshot = store.snapshot();
-+  const briefReady = Boolean((snapshot.brief as { client?: string }).client);
-+  const brief: Brief = briefReady ? (snapshot.brief as Brief) : BRIEF;
-+
-+  if (!briefReady) {
-+    return (
-+      <Panel eyebrow="Timeline" title="The day starts with the event">
-+        <EmptyState
-+          icon={CalendarDays}
-+          title="No event day yet"
-+          description="Start the sample event to bring in the venue access, crew call, run of show and hard stop for the Northwind launch."
-+          action={
-+            <Button size="sm" onClick={onStartSample}>
-+              Start with the sample event
-+            </Button>
-+          }
-+        />
-+      </Panel>
-+    );
-+  }
-+
-+  const setup =
-+    (REQUIREMENTS.find((requirement) => requirement.id === "REQ-venue-loading-1")
-+      ?.expectedValues?.setupMinutes as number | undefined) ?? 45;
-+  const margin =
-+    (REQUIREMENTS.find((requirement) => requirement.id === "REQ-production-runofshow-1")
-+      ?.expectedValues?.marginMinutes as number | undefined) ?? 30;
-+
-+  const accessOpen = minutes(snapshot.location.loadingWindow.start);
-+  const accessClose = minutes(snapshot.location.loadingWindow.end);
-+  const crewCall = minutes(snapshot.crew.arrivalTime);
-+  const setupDone = crewCall + setup;
-+  const showEnd = minutes(snapshot.production.runOfShowEnd);
-+  const hardStop = minutes(snapshot.location.hardStop);
-+
-+  const entries: TimelineEntry[] = [
-+    {
-+      id: "timeline-access-open",
-+      time: snapshot.location.loadingWindow.start,
-+      label: "Access opens",
-+      detail: `${snapshot.location.venueName} freight access begins.`,
-+      note:
-+        crewCall < accessOpen
-+          ? `The crew is due at ${snapshot.crew.arrivalTime}, before access opens.`
-+          : undefined,
-+    },
-+    {
-+      id: "timeline-access-close",
-+      time: snapshot.location.loadingWindow.end,
-+      label: "Access closes",
-+      detail: "Freight access ends for the venue.",
-+    },
-+    {
-+      id: "timeline-crew-call",
-+      time: snapshot.crew.arrivalTime,
-+      label: "Crew call",
-+      detail: "Crew arrives on site and starts the build.",
-+    },
-+    {
-+      id: "timeline-setup",
-+      time: clock(setupDone),
-+      label: "Setup complete",
-+      detail: `${setup} minutes after the crew call.`,
-+      note:
-+        setupDone > accessClose
-+          ? `Setup runs ${setupDone - accessClose} minutes past the ${snapshot.location.loadingWindow.end} access close.`
-+          : undefined,
-+    },
-+    {
-+      id: "timeline-photo-start",
-+      time: snapshot.photographer.arrivalWindow.start,
-+      label: "Photography begins",
-+      detail: `Coverage until ${snapshot.photographer.arrivalWindow.end}.`,
-+    },
-+    {
-+      id: "timeline-photo-end",
-+      time: snapshot.photographer.arrivalWindow.end,
-+      label: "Photography ends",
-+      detail: `${snapshot.photographer.deliverables.editedImages} edited images to follow within ${snapshot.photographer.deliverables.deliveryDays} days.`,
-+    },
-+    {
-+      id: "timeline-runofshow",
-+      time: snapshot.production.runOfShowEnd,
-+      label: "Run of show ends",
-+      detail: "The programme finishes for the evening.",
-+      note:
-+        showEnd + margin > hardStop
-+          ? `With a ${margin} minute margin the room is needed until ${clock(
-+              showEnd + margin,
-+            )}, after the ${snapshot.location.hardStop} hard stop.`
-+          : undefined,
-+    },
-+    {
-+      id: "timeline-hard-stop",
-+      time: snapshot.location.hardStop,
-+      label: "Hard stop",
-+      detail: "The venue must be clear.",
-+    },
-+  ]
-+    .filter((entry) => Number.isFinite(minutes(entry.time as string)))
-+    .sort((left, right) => minutes(left.time) - minutes(right.time));
++  const entries = timelineEntries(store);
++  const removed = store.archivedEvidence;
 +
 +  return (
-+    <div className="space-y-4">
-+      <Panel
-+        eyebrow="Timeline"
-+        title={`${formatDate(brief.eventDate)} · ${snapshot.location.venueName}`}
-+        description="The shape of the day for the launch."
-+        actions={
-+          <Button size="sm" variant="ghost" onClick={() => onOpenTab("checklist")}>
-+            Open the checklist
-+          </Button>
-+        }
++    <Sheet open={open} onOpenChange={onOpenChange}>
++      <SheetContent
++        side="right"
++        className="w-full overflow-y-auto sm:max-w-md"
 +      >
-+        <ol className="relative space-y-4 border-l border-border/70 pl-5">
-+          {entries.map((entry) => (
-+            <li id={entry.id} key={`${entry.time}-${entry.label}`} className="relative">
-+              <span
-+                className={`absolute -left-[27px] top-1 flex size-3.5 items-center justify-center rounded-full border-2 border-background ${
-+                  entry.note ? "bg-warning" : "bg-primary"
-+                }`}
-+                aria-hidden
-+              />
-+              <div className="flex flex-wrap items-baseline gap-x-2">
-+                <span className="tnum text-[12px] font-semibold">{entry.time}</span>
-+                <p className="text-[13px] font-medium">{entry.label}</p>
-+              </div>
-+              <p className="text-[11.5px] leading-5 text-muted-foreground">{entry.detail}</p>
-+              {entry.note && (
-+                <p className="mt-1 flex items-start gap-1.5 rounded-md border border-warning/25 bg-warning/5 px-2 py-1 text-[11px] leading-5 text-warning">
-+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-+                  {entry.note}
-+                </p>
-+              )}
-+            </li>
-+          ))}
-+        </ol>
++        <SheetHeader>
++          <SheetTitle className="flex items-center gap-2">
++            <History className="size-4" aria-hidden />
++            Timeline
++          </SheetTitle>
++          <SheetDescription>
++            Changes, decisions, paperwork reviews and sign-offs, in order.
++          </SheetDescription>
++        </SheetHeader>
 +
-+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
-+          <Button size="sm" variant="outline" onClick={() => onOpenTab("partners")}>
-+            <Clock3 className="size-3.5" />
-+            See the partners
-+          </Button>
-+          <Button size="sm" variant="ghost" onClick={() => onOpenTab("budget")}>
-+            Check the budget
-+          </Button>
++        <div className="mt-4 space-y-4">
++          {entries.length === 0 ? (
++            <p className="text-[12px] text-muted-foreground">Nothing has happened yet.</p>
++          ) : (
++            <ol className="relative space-y-3 border-l border-border/70 pl-4">
++              {entries.map((entry) => (
++                <li key={entry.key} className="relative">
++                  <span
++                    className="absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-background bg-primary"
++                    aria-hidden
++                  />
++                  <p className="text-[12px] font-medium leading-5">{entry.title}</p>
++                  <p className="text-[10.5px] leading-5 text-muted-foreground">{entry.detail}</p>
++                  {entry.scope && entry.scope.length > 0 && (
++                    <div className="mt-1">
++                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
++                        Recorded scope
++                      </p>
++                      <p className="text-[10px] leading-4 text-muted-foreground">
++                        {entry.scope.join(" · ")}
++                      </p>
++                      <Chip tone={entry.currentness === "current" ? "success" : "neutral"}>
++                        {entry.currentness === "current" ? "Still applies" : "Earlier sign-off"}
++                      </Chip>
++                    </div>
++                  )}
++                </li>
++              ))}
++            </ol>
++          )}
++
++          {removed.length > 0 && (
++            <section className="border-t border-border/60 pt-3">
++              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
++                Removed from the plan
++              </p>
++              <ul className="mt-1.5 space-y-2">
++                {removed.map((entry) => (
++                  <li key={entry.evidence.id} className="rounded-md border border-border/60 px-2.5 py-2">
++                    <div className="flex flex-wrap items-center gap-1.5">
++                      <p className="text-[11.5px] font-medium">
++                        {sourceAttribution(entry.evidence)}
++                      </p>
++                      <Chip tone="neutral">kept for reference</Chip>
++                    </div>
++                    <p className="mt-0.5 line-clamp-2 text-[10.5px] italic leading-4 text-muted-foreground">
++                      “{entry.evidence.sourceExcerpt}”
++                    </p>
++                    <p className="mt-0.5 text-[9.5px] text-muted-foreground">
++                      Received {formatDate(entry.evidence.observedAt)}
++                    </p>
++                  </li>
++                ))}
++              </ul>
++            </section>
++          )}
 +        </div>
-+      </Panel>
-+    </div>
++      </SheetContent>
++    </Sheet>
 +  );
 +}
 diff --git a/app/src/components/oncuex/ui-bits.tsx b/app/src/components/oncuex/ui-bits.tsx
@@ -8859,7 +8870,7 @@ new file mode 100644
 +    ? {
 +        title: "Move the venue to Pier 9 Loft",
 +        detail:
-+          "Use the Pier 9 Loft details from the venue pack. The checklist, timeline, budget and partners update in place.",
++          "Use the Pier 9 Loft details from the venue pack. The checklist, itinerary, budget and partners update in place.",
 +        action: () => session.apply("Venue updated", (current) => adoptVenueChange(current)),
 +      }
 +    : !recoveryDone
@@ -8882,7 +8893,7 @@ new file mode 100644
 +  const applied = [
 +    { label: "Venue moved to Pier 9 Loft", done: venueDone },
 +    { label: "Annex and revised budget applied", done: recoveryDone },
-+    { label: "Recovered documents added", done: confirmationsDone },
++    { label: "Recovery paperwork added", done: confirmationsDone },
 +  ];
 +
 +  return (
@@ -8898,7 +8909,7 @@ new file mode 100644
 +          <DialogTitle>Update event</DialogTitle>
 +          <DialogDescription>
 +            Sample updates for this fictional launch. They do not contact the venue or any partner.
-+            They update the checklist, timeline, budget and partners in place.
++            They update the checklist, itinerary, budget and partners in place.
 +          </DialogDescription>
 +        </DialogHeader>
 +
@@ -8938,7 +8949,7 @@ new file mode 100644
 +          <div className="rounded-lg border border-success/25 bg-success/5 px-3 py-2.5">
 +            <p className="text-[12.5px] font-semibold">The recovered plan is in place.</p>
 +            <p className="mt-0.5 text-[11.5px] leading-5 text-muted-foreground">
-+              The checklist, timeline, budget and partners reflect the annex and the revised plan.
++              The checklist, itinerary, budget and partners reflect the annex and the revised plan.
 +            </p>
 +            <Button
 +              size="sm"
@@ -9983,7 +9994,7 @@ new file mode 100644
 +        ok: true,
 +        detail: "Project data restored from a validated export.",
 +      });
-+      setFlash("Project data restored. The checklist, activity and sign-offs were replayed.");
++      setFlash("Project data restored. The checklist, timeline and sign-offs were replayed.");
 +      setError(persisted.warning);
 +    } catch (error) {
 +      setFlash(null);
@@ -15394,23 +15405,23 @@ new file mode 100644
 +}
 +
 +export function validateBriefProposal(value: unknown): { ok: true; proposal: BriefProposal } | { ok: false; error: string } {
-+  if (!isRecord(value)) return { ok: false, error: "The proposal is not an object." };
++  if (!isRecord(value)) return { ok: false, error: "The reading came back incomplete." };
 +  const strings = (input: unknown) =>
 +    Array.isArray(input) && input.every((entry) => typeof entry === "string");
 +  if (typeof value.client !== "string" && value.client !== null) {
-+    return { ok: false, error: "Client is invalid." };
++    return { ok: false, error: "The client name didn’t come through clearly." };
 +  }
 +  if (typeof value.project !== "string" && value.project !== null) {
-+    return { ok: false, error: "Project is invalid." };
++    return { ok: false, error: "The event name didn’t come through clearly." };
 +  }
 +  if (
 +    value.eventDate !== null &&
 +    (typeof value.eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.eventDate))
 +  ) {
-+    return { ok: false, error: "Date is invalid." };
++    return { ok: false, error: "The date didn’t come through cleanly." };
 +  }
 +  if (value.guestCount !== null && !Number.isInteger(value.guestCount)) {
-+    return { ok: false, error: "Guest count is invalid." };
++    return { ok: false, error: "The guest count looks off." };
 +  }
 +  if (value.approvedBudget !== null) {
 +    if (
@@ -15418,21 +15429,21 @@ new file mode 100644
 +      typeof value.approvedBudget.currency !== "string" ||
 +      !Number.isInteger(value.approvedBudget.minorUnits)
 +    ) {
-+      return { ok: false, error: "Budget is invalid." };
++      return { ok: false, error: "The budget looks off." };
 +    }
 +  }
 +  if (value.timezone !== null && typeof value.timezone !== "string") {
-+    return { ok: false, error: "Timezone is invalid." };
++    return { ok: false, error: "The timezone looks off." };
 +  }
 +  if (!strings(value.openQuestions) || !strings(value.uncertainties) || !strings(value.questions)) {
-+    return { ok: false, error: "Question or uncertainty fields are invalid." };
++    return { ok: false, error: "The open questions came back in an odd shape." };
 +  }
 +  if (!Array.isArray(value.sourceSpans)) {
-+    return { ok: false, error: "Source spans are missing." };
++    return { ok: false, error: "We lost track of where some details came from." };
 +  }
 +  for (const span of value.sourceSpans) {
 +    if (!isRecord(span) || typeof span.field !== "string" || typeof span.quote !== "string") {
-+      return { ok: false, error: "A source span is invalid." };
++      return { ok: false, error: "One of the quoted details doesn’t match the brief." };
 +    }
 +  }
 +  return { ok: true, proposal: value as unknown as BriefProposal };
@@ -15584,104 +15595,6 @@ new file mode 100644
 +    <App />
 +  </ErrorBoundary>,
 +);
-diff --git a/app/src/oncuex/activity.ts b/app/src/oncuex/activity.ts
-new file mode 100644
---- /dev/null
-+++ b/app/src/oncuex/activity.ts
-@@ -0,0 +1,93 @@
-+import { changeTitle } from "@/oncuex/demo";
-+import { PEOPLE, sourceAttribution } from "@/oncuex/scenario";
-+import { formatDate } from "@/oncuex/format";
-+import type { EvidenceRecord, EventRecord } from "@/oncuex/types";
-+import type { Store } from "@/oncuex/store";
-+
-+export interface ActivityEntry {
-+  key: string;
-+  title: string;
-+  detail: string;
-+  scope?: string[];
-+  currentness?: "current" | "historical";
-+}
-+
-+export function activityEntries(store: Store): ActivityEntry[] {
-+  const findSource = (id: string): EvidenceRecord | undefined =>
-+    store.evidence.find((record) => record.id === id) ??
-+    store.archivedEvidence.find((entry) => entry.evidence.id === id)?.evidence;
-+
-+  return [...store.events].reverse().map((event: EventRecord) => {
-+    const actor = PEOPLE[event.actor ?? ""] ?? "The event team";
-+    switch (event.eventType) {
-+      case "brief.adopted":
-+        return {
-+          key: event.id,
-+          title: "Plan started from the Northwind brief",
-+          detail: `${actor} adopted the launch brief and approved budget.`,
-+        };
-+      case "evidence.attached": {
-+        const source = findSource(String(event.payload.evidenceId ?? ""));
-+        return {
-+          key: event.id,
-+          title: source ? `Document added: ${sourceAttribution(source)}` : "A document was added",
-+          detail: source
-+            ? `${actor} · received ${formatDate(source.observedAt)}`
-+            : `${actor} added a document to the plan.`,
-+        };
-+      }
-+      case "evidence.reviewed": {
-+        const source = findSource(String(event.payload.evidenceId ?? ""));
-+        const disposition = String(event.payload.disposition ?? "");
-+        const name = source ? sourceAttribution(source) : "a document";
-+        return {
-+          key: event.id,
-+          title:
-+            disposition === "accepted"
-+              ? `Document reviewed and current: ${name}`
-+              : disposition === "rejected"
-+                ? `Document marked not used or needing a new version: ${name}`
-+                : `Document returned for review: ${name}`,
-+          detail:
-+            disposition === "accepted"
-+              ? `${actor} reviewed it as current. No partner confirmation is implied.`
-+              : `${actor} · no message was sent.`,
-+        };
-+      }
-+      case "change.adopted": {
-+        const id = String(event.payload.changeId ?? "");
-+        return {
-+          key: event.id,
-+          title: changeTitle(id),
-+          detail: `${actor} · some checklist items may need an update; the rest stayed valid.`,
-+        };
-+      }
-+      case "decision.recorded": {
-+        const decisionId = String(event.payload.decisionId ?? "");
-+        const decision = store.decisionsList().find((candidate) => candidate.id === decisionId);
-+        const sources = decision
-+          ? store.decisionEvidence(decision.id).map((record) => sourceAttribution(record))
-+          : [];
-+        return {
-+          key: event.id,
-+          title: "Plan signed off",
-+          detail: `${actor} signed off the plan.`,
-+          scope: sources,
-+          currentness: decision ? store.currentness(decision.id) : undefined,
-+        };
-+      }
-+      case "requirementSet.changed":
-+        return {
-+          key: event.id,
-+          title: "The scope of the plan changed",
-+          detail: `${actor} · the previous sign-off no longer applies.`,
-+        };
-+      default:
-+        return {
-+          key: event.id,
-+          title: "The plan was updated",
-+          detail: actor,
-+        };
-+    }
-+  });
-+}
 diff --git a/app/src/oncuex/demo.ts b/app/src/oncuex/demo.ts
 new file mode 100644
 --- /dev/null
@@ -15756,7 +15669,7 @@ new file mode 100644
 +      structuredClone(evidenceById(id)),
 +    );
 +  }
-+  return `The Northwind brief is adopted and ${BASELINE_EVIDENCE_IDS.length} sources are attached.`;
++  return `The brief is in and ${BASELINE_EVIDENCE_IDS.length} pieces of sample paperwork are attached.`;
 +}
 +
 +export function recordAcceptance(store: Store, decisionId: string): CommandResult {
@@ -15787,14 +15700,14 @@ new file mode 100644
 +  const change = venueChange(store.snapshot());
 +  const count = Object.keys(change.changedFields).length;
 +  store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-+  return `The venue moved to Pier 9 Loft across ${count} plan values. Review what needs updating.`;
++  return `Moved to Pier 9 Loft (${count} details changed). Take a look at what needs refreshing.`;
 +}
 +
 +export function adoptRecovery(store: Store): string {
 +  const change = recoveryChange(store.snapshot());
 +  const count = Object.keys(change.changedFields).length;
 +  store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-+  return `The recovered plan is in place across ${count} plan values.`;
++  return "Annex, budget and schedule updated.";
 +}
 +
 +export function attachRecoveryEvidence(store: Store): string {
@@ -15804,7 +15717,7 @@ new file mode 100644
 +      structuredClone(evidenceById(id)),
 +    );
 +  }
-+  return `${RECOVERY_EVIDENCE_IDS.length} recovered documents added.`;
++  return `${RECOVERY_EVIDENCE_IDS.length} pieces of recovery paperwork added.`;
 +}
 +
 +export function reviewEvidence(
@@ -15827,7 +15740,7 @@ new file mode 100644
 +    commandFor(store, "contributor", CONTRIBUTOR_ACTOR),
 +    record,
 +  );
-+  return "A new source was added and needs your review.";
++  return "New paperwork added. It needs a look.";
 +}
 +
 +/** O7: removing a scope archives its records instead of deleting them. */
@@ -15856,7 +15769,7 @@ new file mode 100644
 +    changedFields: diffState(store.snapshot(), baselineTarget()),
 +  };
 +  store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-+  return "The plan values are back to the original launch plan. The earlier approval does not return.";
++  return "The plan is back to the original details. The old approval does not come back with it.";
 +}
 +
 +/* ---------------------------------------------------------------- state probes */
@@ -15889,7 +15802,7 @@ new file mode 100644
 +export function changeTitle(id: string): string {
 +  if (id === CHANGE_META.venue.id) return CHANGE_META.venue.title;
 +  if (id === CHANGE_META.recovery.id) return CHANGE_META.recovery.title;
-+  if (id === "CHG-3") return "Plan values reverted to the original launch plan";
++  if (id === "CHG-3") return "Plan put back to the original details";
 +  return "The plan changed";
 +}
 diff --git a/app/src/oncuex/engine.ts b/app/src/oncuex/engine.ts
@@ -16568,21 +16481,21 @@ new file mode 100644
 +export const residualText = (residual: Residual): string => {
 +  switch (residual.code) {
 +    case "mandatory_evidence_missing":
-+      return "No usable document has been received for this item yet.";
++      return "No paperwork for this yet.";
 +    case "evidence_expired":
-+      return "The document for this item has expired.";
++      return "This paperwork has expired.";
 +    case "bound_field_changed":
-+      return "The plan changed after this document was received.";
++      return "The plan moved after this came in.";
 +    case "predicate_false":
-+      return "The current plan values do not meet this item.";
++      return "The plan doesn’t quite meet this yet.";
 +    case "prerequisite_not_supported": {
 +      const names = (residual.prerequisiteIds ?? []).map(requirementLabel);
 +      return `Waiting on ${names.join(", ")}.`;
 +    }
 +    case "prerequisite_cycle":
-+      return "The dependencies form a loop; this needs a decision.";
++      return "These dependencies loop back; someone will need to untangle them.";
 +    case "prerequisite_conflict":
-+      return `Two dependencies disagree about ${fieldLabel(String(residual.field))}; this needs a decision.`;
++      return `Two requirements disagree about ${fieldLabel(String(residual.field))}; someone needs to settle it.`;
 +    default:
 +      return "This item needs attention.";
 +  }
@@ -16590,10 +16503,10 @@ new file mode 100644
 +
 +export const eligibilityText: Record<string, string> = {
 +  role_denied: "Only the event lead can sign off this plan.",
-+  mandatory_requirements_not_supported: "Some checklist items still need attention.",
-+  mandatory_evidence_expired: "A document this plan relies on has expired.",
-+  integration_failed: "A few details do not fit together yet.",
-+  requirement_set_changed: "The scope changed after the last sign-off.",
++  mandatory_requirements_not_supported: "A few checklist items still need a look.",
++  mandatory_evidence_expired: "Some paperwork the plan relies on has expired.",
++  integration_failed: "The day doesn’t quite fit together yet.",
++  requirement_set_changed: "The plan’s scope changed since the last sign-off.",
 +  revision_lineage_changed: "The plan has moved since the last sign-off.",
 +  stale_revision: "The plan changed after the last sign-off.",
 +};
@@ -16602,7 +16515,7 @@ new file mode 100644
 +  stale_decision: "The plan changed after this sign-off.",
 +  revision_lineage_changed: "The plan has moved since this sign-off.",
 +  requirement_set_changed: "The scope changed after this sign-off.",
-+  mandatory_evidence_expired: "A document this sign-off relied on has expired.",
++  mandatory_evidence_expired: "Paperwork this sign-off relied on has expired.",
 +};
 +
 +export const roleLabel = (role: Role): string =>
@@ -16633,7 +16546,7 @@ diff --git a/app/src/oncuex/presentation.ts b/app/src/oncuex/presentation.ts
 new file mode 100644
 --- /dev/null
 +++ b/app/src/oncuex/presentation.ts
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,272 @@
 +import { minutes } from "@/oncuex/engine";
 +import { bindingMatches } from "@/oncuex/schema";
 +import { REQUIREMENTS } from "@/oncuex/scenario";
@@ -16683,6 +16596,21 @@ new file mode 100644
 +  return changed ? "update" : "confirmed";
 +}
 +
++export function isSuperseded(
++  record: EvidenceRecord,
++  siblings: EvidenceRecord[],
++  snapshot: ProjectState,
++  now: string,
++): boolean {
++  if (sourceState(record, snapshot, now) !== "update") return false;
++  return siblings.some(
++    (other) =>
++      other.id !== record.id &&
++      other.requirementId === record.requirementId &&
++      sourceState(other, snapshot, now) === "confirmed",
++  );
++}
++
 +export function sourceStateLabel(state: SourceState): string {
 +  switch (state) {
 +    case "confirmed":
@@ -16701,26 +16629,26 @@ new file mode 100644
 +  detail: string;
 +  tone: "done" | "waiting" | "needs" | "idle";
 +} {
-+  if (!result) return { label: "Not assessed", detail: "", tone: "idle" };
++  if (!result) return { label: "Not checked yet", detail: "", tone: "idle" };
 +  if (result.status === "supported") {
-+    return { label: "Supporting checks pass", detail: "", tone: "done" };
++    return { label: "Checks pass", detail: "", tone: "done" };
 +  }
 +  if (result.status === "missing") {
-+    return { label: "No usable document yet", detail: "", tone: "idle" };
++    return { label: "No paperwork yet", detail: "", tone: "idle" };
 +  }
 +  const residual = result.residuals[0];
 +  const detail = residual ? residualText(residual) : "";
 +  if (result.status === "outdated") {
 +    return { label: "Needs an update", detail, tone: "needs" };
 +  }
-+  return { label: "Needs review", detail, tone: "waiting" };
++  return { label: "Needs a look", detail, tone: "waiting" };
 +}
 +
 +export interface PlanException {
 +  id: string;
 +  title: string;
 +  detail: string;
-+  tab: "checklist" | "timeline" | "budget" | "partners";
++  tab: "checklist" | "itinerary" | "budget" | "partners";
 +  anchor: string;
 +}
 +
@@ -16757,7 +16685,7 @@ new file mode 100644
 +      detail: `The ${snapshot.crew.arrivalTime} crew call plus ${setup} minutes setup reaches ${formatTime(
 +        crewReach,
 +      )}; access closes at ${snapshot.location.loadingWindow.end}.`,
-+      tab: "timeline",
++      tab: "itinerary",
 +      anchor: "timeline-setup",
 +    });
 +  }
@@ -16784,7 +16712,7 @@ new file mode 100644
 +      detail: `Run of show ends at ${snapshot.production.runOfShowEnd}; with a ${margin} minute margin the room is needed until ${formatTime(
 +        showEnd + margin,
 +      )}, but the hard stop is ${snapshot.location.hardStop}.`,
-+      tab: "timeline",
++      tab: "itinerary",
 +      anchor: "timeline-runofshow",
 +    });
 +  }
@@ -17931,7 +17859,7 @@ new file mode 100644
 +  },
 +  recovery: {
 +    id: "CHG-2",
-+    title: "Recovered plan: annex, rescoped spend, revised schedule",
++    title: "Venue, budget and schedule updated for the annex",
 +    claim:
 +      "The adjoining annex raises occupancy and extends freight access. Catering and production are rescoped to recover the budget, and the crew call and run of show move to fit the annex access window.",
 +    sourceRefIds: ["SRC-3", "SRC-6", "SRC-7", "SRC-8", "SRC-9", "SRC-10", "SRC-12"],
@@ -19632,6 +19560,104 @@ new file mode 100644
 +  if (error instanceof Error) return error.message;
 +  return String(error);
 +}
+diff --git a/app/src/oncuex/timeline.ts b/app/src/oncuex/timeline.ts
+new file mode 100644
+--- /dev/null
++++ b/app/src/oncuex/timeline.ts
+@@ -0,0 +1,93 @@
++import { changeTitle } from "@/oncuex/demo";
++import { PEOPLE, sourceAttribution } from "@/oncuex/scenario";
++import { formatDate } from "@/oncuex/format";
++import type { EvidenceRecord, EventRecord } from "@/oncuex/types";
++import type { Store } from "@/oncuex/store";
++
++export interface TimelineEntry {
++  key: string;
++  title: string;
++  detail: string;
++  scope?: string[];
++  currentness?: "current" | "historical";
++}
++
++export function timelineEntries(store: Store): TimelineEntry[] {
++  const findSource = (id: string): EvidenceRecord | undefined =>
++    store.evidence.find((record) => record.id === id) ??
++    store.archivedEvidence.find((entry) => entry.evidence.id === id)?.evidence;
++
++  return [...store.events].reverse().map((event: EventRecord) => {
++    const actor = PEOPLE[event.actor ?? ""] ?? "The event team";
++    switch (event.eventType) {
++      case "brief.adopted":
++        return {
++          key: event.id,
++          title: "Plan started from the Northwind brief",
++          detail: `${actor} adopted the launch brief and approved budget.`,
++        };
++      case "evidence.attached": {
++        const source = findSource(String(event.payload.evidenceId ?? ""));
++        return {
++          key: event.id,
++          title: source ? `Paperwork added: ${sourceAttribution(source)}` : "New paperwork",
++          detail: source
++            ? `${actor} · received ${formatDate(source.observedAt)}`
++            : `${actor} added paperwork to the plan.`,
++        };
++      }
++      case "evidence.reviewed": {
++        const source = findSource(String(event.payload.evidenceId ?? ""));
++        const disposition = String(event.payload.disposition ?? "");
++        const name = source ? sourceAttribution(source) : "some paperwork";
++        return {
++          key: event.id,
++          title:
++            disposition === "accepted"
++              ? `Paperwork reviewed and current: ${name}`
++              : disposition === "rejected"
++                ? `Paperwork marked for a new version: ${name}`
++                : `Paperwork sent back for a look: ${name}`,
++          detail:
++            disposition === "accepted"
++              ? `${actor} reviewed it as current.`
++              : `${actor} marked it for a new version.`,
++        };
++      }
++      case "change.adopted": {
++        const id = String(event.payload.changeId ?? "");
++        return {
++          key: event.id,
++          title: changeTitle(id),
++          detail: `${actor} · some checklist items may need an update; the rest stayed valid.`,
++        };
++      }
++      case "decision.recorded": {
++        const decisionId = String(event.payload.decisionId ?? "");
++        const decision = store.decisionsList().find((candidate) => candidate.id === decisionId);
++        const sources = decision
++          ? store.decisionEvidence(decision.id).map((record) => sourceAttribution(record))
++          : [];
++        return {
++          key: event.id,
++          title: "Plan signed off",
++          detail: `${actor} signed off the plan.`,
++          scope: sources,
++          currentness: decision ? store.currentness(decision.id) : undefined,
++        };
++      }
++      case "requirementSet.changed":
++        return {
++          key: event.id,
++          title: "The plan’s scope changed",
++          detail: `${actor} · the previous sign-off no longer applies.`,
++        };
++      default:
++        return {
++          key: event.id,
++          title: "The plan was updated",
++          detail: actor,
++        };
++    }
++  });
++}
 diff --git a/app/src/oncuex/types.ts b/app/src/oncuex/types.ts
 new file mode 100644
 --- /dev/null
@@ -19959,7 +19985,7 @@ new file mode 100644
 +
 +import { Button } from "@/components/ui/button";
 +import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-+import { ActivitySheet } from "@/components/oncuex/activity-sheet";
++import { TimelineSheet } from "@/components/oncuex/timeline-sheet";
 +import { BriefReviewDialog } from "@/components/oncuex/brief-review-dialog";
 +import { ClientUpdateDialog } from "@/components/oncuex/client-update-dialog";
 +import { BudgetView } from "@/components/oncuex/budget-view";
@@ -19968,7 +19994,7 @@ new file mode 100644
 +import { Header } from "@/components/oncuex/header";
 +import { PartnersView } from "@/components/oncuex/partners-view";
 +import { SignOffDialog } from "@/components/oncuex/signoff-dialog";
-+import { TimelineView } from "@/components/oncuex/timeline-view";
++import { ItineraryView } from "@/components/oncuex/itinerary-view";
 +import { useOperatorSession } from "@/hooks/use-operator-session";
 +import { loadBaseline } from "@/oncuex/demo";
 +import { hasBrief as isBriefAdopted } from "@/oncuex/engine";
@@ -19977,7 +20003,7 @@ new file mode 100644
 +const TABS = [
 +  { id: "overview", label: "Overview", icon: CalendarDays },
 +  { id: "checklist", label: "Checklist", icon: ListChecks },
-+  { id: "timeline", label: "Timeline", icon: Clock3 },
++  { id: "itinerary", label: "Itinerary", icon: Clock3 },
 +  { id: "budget", label: "Budget", icon: Wallet },
 +  { id: "partners", label: "Partners", icon: Handshake },
 +];
@@ -19985,7 +20011,7 @@ new file mode 100644
 +const Index = () => {
 +  const session = useOperatorSession();
 +  const [tab, setTab] = useState("overview");
-+  const [activityOpen, setActivityOpen] = useState(false);
++  const [timelineOpen, setTimelineOpen] = useState(false);
 +  const [signOffOpen, setSignOffOpen] = useState(false);
 +  const [briefReviewOpen, setBriefReviewOpen] = useState(false);
 +  const [clientUpdateOpen, setClientUpdateOpen] = useState(false);
@@ -20048,7 +20074,7 @@ new file mode 100644
 +      <Header
 +        session={session}
 +        onOpenSignOff={() => setSignOffOpen(true)}
-+        onOpenActivity={() => setActivityOpen(true)}
++        onOpenTimeline={() => setTimelineOpen(true)}
 +        onReloadSample={session.reloadSample}
 +        theme={theme}
 +        onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
@@ -20141,7 +20167,7 @@ new file mode 100644
 +              assessment={assessment}
 +              onOpenTab={setTab}
 +              onStartSample={startSample}
-+              onOpenActivity={() => setActivityOpen(true)}
++              onOpenTimeline={() => setTimelineOpen(true)}
 +              onOpenSignOff={() => setSignOffOpen(true)}
 +              onReviewBrief={() => setBriefReviewOpen(true)}
 +              onOpenClientUpdate={() => setClientUpdateOpen(true)}
@@ -20158,8 +20184,8 @@ new file mode 100644
 +            />
 +          </TabsContent>
 +
-+          <TabsContent value="timeline" className="mt-4 animate-fade-rise focus-visible:outline-none">
-+            <TimelineView session={session} onStartSample={startSample} onOpenTab={setTab} />
++          <TabsContent value="itinerary" className="mt-4 animate-fade-rise focus-visible:outline-none">
++            <ItineraryView session={session} onStartSample={startSample} onOpenTab={setTab} />
 +          </TabsContent>
 +
 +          <TabsContent value="budget" className="mt-4 animate-fade-rise focus-visible:outline-none">
@@ -20182,10 +20208,10 @@ new file mode 100644
 +        </span>
 +      </footer>
 +
-+      <ActivitySheet
++      <TimelineSheet
 +        session={session}
-+        open={activityOpen}
-+        onOpenChange={setActivityOpen}
++        open={timelineOpen}
++        onOpenChange={setTimelineOpen}
 +      />
 +      <SignOffDialog
 +        session={session}
@@ -20284,7 +20310,7 @@ diff --git a/app/supabase/functions/oncuex-ai/index.ts b/app/supabase/functions/
 new file mode 100644
 --- /dev/null
 +++ b/app/supabase/functions/oncuex-ai/index.ts
-@@ -0,0 +1,264 @@
+@@ -0,0 +1,270 @@
 +const corsHeaders = {
 +  "Access-Control-Allow-Origin": "*",
 +  "Access-Control-Allow-Headers":
@@ -20319,16 +20345,22 @@ new file mode 100644
 +- openQuestions are questions the client or brief explicitly leaves open.
 +- Return no prose outside the JSON.`;
 +
-+const DRAFT_SYSTEM = `You write a short client update for an event producer to review.
-+Use ONLY the supplied project facts. Return ONLY JSON: {"draft": string}.
++const DRAFT_SYSTEM = `You write a short, natural client update for an event producer to review and send.
++Use ONLY the supplied facts. Return ONLY JSON: {"draft": string}.
++Voice:
++- 90-140 words, two or three short paragraphs, first person plural.
++- Sound like a calm, experienced producer writing to a client they know.
++- Plain, warm, specific sentences. No bullet lists, headings or corporate filler.
++- Avoid internal jargon: "supporting checks", "sign-off", "documents", "readiness", "status", "alignment", "deliverables".
 +Rules:
-+- Do not claim a partner confirmed, accepted, booked or is available unless the supplied state explicitly says so.
-+- Do not claim the plan is approved or signed off unless the supplied state says it is current.
-+- Distinguish what is reviewed and current, what needs a new document, and what is still open.
++- Start with where the launch stands.
++- Mention at most one or two practical things you are still handling.
++- End with any open questions.
++- Do not claim a partner confirmed, booked or is available unless the supplied facts say so.
++- Do not say the plan is approved unless the supplied sign-off says the current plan is approved.
 +- Do not invent dates, amounts, people, venues or tasks.
-+- Mention the open questions if any.
-+- Keep it to 120-180 words, plain professional prose, no tables or markdown headings.
-+- This is an unsent draft; do not say it has been sent.`;
++- This is an unsent draft; never say it has been sent.
++- Do not enumerate every work area or every document.`;
 +
 +function textFromResponse(payload: unknown): string {
 +  const response = payload as {

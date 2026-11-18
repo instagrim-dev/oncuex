@@ -15,7 +15,7 @@ export interface BriefProposal {
 
 export interface AiRun {
   id: string;
-  action: "extract_brief" | "draft_update";
+  action: "extract_brief" | "draft_update" | "suggest_source";
   at: string;
   durationMs: number;
   status: "ok" | "error";
@@ -77,23 +77,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function validateBriefProposal(value: unknown): { ok: true; proposal: BriefProposal } | { ok: false; error: string } {
-  if (!isRecord(value)) return { ok: false, error: "The proposal is not an object." };
+  if (!isRecord(value)) return { ok: false, error: "The reading came back incomplete." };
   const strings = (input: unknown) =>
     Array.isArray(input) && input.every((entry) => typeof entry === "string");
   if (typeof value.client !== "string" && value.client !== null) {
-    return { ok: false, error: "Client is invalid." };
+    return { ok: false, error: "The client name didn’t come through clearly." };
   }
   if (typeof value.project !== "string" && value.project !== null) {
-    return { ok: false, error: "Project is invalid." };
+    return { ok: false, error: "The event name didn’t come through clearly." };
   }
   if (
     value.eventDate !== null &&
     (typeof value.eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.eventDate))
   ) {
-    return { ok: false, error: "Date is invalid." };
+    return { ok: false, error: "The date didn’t come through cleanly." };
   }
   if (value.guestCount !== null && !Number.isInteger(value.guestCount)) {
-    return { ok: false, error: "Guest count is invalid." };
+    return { ok: false, error: "The guest count looks off." };
   }
   if (value.approvedBudget !== null) {
     if (
@@ -101,29 +101,29 @@ export function validateBriefProposal(value: unknown): { ok: true; proposal: Bri
       typeof value.approvedBudget.currency !== "string" ||
       !Number.isInteger(value.approvedBudget.minorUnits)
     ) {
-      return { ok: false, error: "Budget is invalid." };
+      return { ok: false, error: "The budget looks off." };
     }
   }
   if (value.timezone !== null && typeof value.timezone !== "string") {
-    return { ok: false, error: "Timezone is invalid." };
+    return { ok: false, error: "The timezone looks off." };
   }
   if (!strings(value.openQuestions) || !strings(value.uncertainties) || !strings(value.questions)) {
-    return { ok: false, error: "Question or uncertainty fields are invalid." };
+    return { ok: false, error: "The open questions came back in an odd shape." };
   }
   if (!Array.isArray(value.sourceSpans)) {
-    return { ok: false, error: "Source spans are missing." };
+    return { ok: false, error: "We lost track of where some details came from." };
   }
   for (const span of value.sourceSpans) {
     if (!isRecord(span) || typeof span.field !== "string" || typeof span.quote !== "string") {
-      return { ok: false, error: "A source span is invalid." };
+      return { ok: false, error: "One of the quoted details doesn’t match the brief." };
     }
   }
   return { ok: true, proposal: value as unknown as BriefProposal };
 }
 
 export async function callOncuexAI<T>(
-  action: "extract_brief" | "draft_update",
-  payload: { briefText?: string; project?: unknown },
+  action: "extract_brief" | "draft_update" | "suggest_source",
+  payload: { briefText?: string; project?: unknown; sourceText?: string },
 ): Promise<AiSuccess<T> | AiFailure> {
   const started = performance.now();
   const at = new Date().toISOString();

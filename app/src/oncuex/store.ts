@@ -32,6 +32,7 @@ import {
   validateRequirement,
   valueMatches,
 } from "./schema";
+import { flawedLegacySample } from "./evidence-trust";
 import type {
   ArchiveEntry,
   Assessment,
@@ -179,7 +180,7 @@ export class Store {
     for (const evidenceId of decision.evidenceIds) {
       const record = this.evidence.find((candidate) => candidate.id === evidenceId);
       if (!record || record.reviewDisposition !== "accepted") return "historical";
-      if (isExpired(record, now)) return "historical";
+      if (flawedLegacySample(record) || isExpired(record, now)) return "historical";
     }
     return "current";
   }
@@ -195,8 +196,7 @@ export class Store {
     if (decision.requirementSetVersion !== (this.project.requirementSetVersion ?? 1)) {
       code = "requirement_set_changed";
     } else if (decision.targetAssessmentRevision === this.assessmentRevision) {
-      // Same revision and set: the only way to be historical is expiry.
-      code = "mandatory_evidence_expired";
+      code = decision.evidenceIds.some((id) => { const record = this.evidence.find((item) => item.id === id); return record && flawedLegacySample(record); }) ? "source_excerpt_inconsistent" : "mandatory_evidence_expired";
     } else if (this.stateDigest() === decision.stateDigest) {
       code = "revision_lineage_changed";
     } else {
@@ -393,6 +393,8 @@ export class Store {
     return this.commit(command, "change.adopted", {
       changeId: change.id,
       changedPaths: Object.keys(fields).sort(),
+      ...(change.title ? { title: change.title } : {}),
+      ...(change.sourceRefIds?.length ? { sourceRefIds: change.sourceRefIds } : {}),
     });
   }
 

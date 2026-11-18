@@ -67,7 +67,7 @@ export function loadBaseline(store: Store): string {
       structuredClone(evidenceById(id)),
     );
   }
-  return `The Northwind brief is adopted and ${BASELINE_EVIDENCE_IDS.length} sources are attached.`;
+  return `The brief is in and ${BASELINE_EVIDENCE_IDS.length} pieces of sample paperwork are attached.`;
 }
 
 export function recordAcceptance(store: Store, decisionId: string): CommandResult {
@@ -94,18 +94,19 @@ export function nextDecisionId(store: Store): string {
   return `DEC-${Math.max(0, ...numbers) + 1}`;
 }
 
-export function adoptVenueChange(store: Store): string {
+export function adoptVenueChange(store: Store, reviewedSourceIds: string[] = []): string {
   const change = venueChange(store.snapshot());
+  change.sourceRefIds = [...new Set([...change.sourceRefIds, ...reviewedSourceIds])];
   const count = Object.keys(change.changedFields).length;
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return `The venue moved to Pier 9 Loft across ${count} plan values. Review what needs updating.`;
+  return `Moved to Pier 9 Loft (${count} details changed). Take a look at what needs refreshing.`;
 }
 
 export function adoptRecovery(store: Store): string {
   const change = recoveryChange(store.snapshot());
   const count = Object.keys(change.changedFields).length;
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return `The recovered plan is in place across ${count} plan values.`;
+  return "Annex, budget and schedule updated.";
 }
 
 export function attachRecoveryEvidence(store: Store): string {
@@ -115,7 +116,7 @@ export function attachRecoveryEvidence(store: Store): string {
       structuredClone(evidenceById(id)),
     );
   }
-  return `${RECOVERY_EVIDENCE_IDS.length} recovered documents added.`;
+  return `${RECOVERY_EVIDENCE_IDS.length} pieces of recovery paperwork added.`;
 }
 
 export function reviewEvidence(
@@ -138,7 +139,7 @@ export function attachPendingEvidence(store: Store): string {
     commandFor(store, "contributor", CONTRIBUTOR_ACTOR),
     record,
   );
-  return "A new source was added and needs your review.";
+  return "New paperwork added. It needs a look.";
 }
 
 /** O7: removing a scope archives its records instead of deleting them. */
@@ -167,7 +168,7 @@ export function revertToBaseline(store: Store): string {
     changedFields: diffState(store.snapshot(), baselineTarget()),
   };
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return "The plan values are back to the original launch plan. The earlier approval does not return.";
+  return "The plan is back to the original details. The old approval does not come back with it.";
 }
 
 /* ---------------------------------------------------------------- state probes */
@@ -200,6 +201,6 @@ export const FIXTURE_EVIDENCE_COUNT = EVIDENCE.length;
 export function changeTitle(id: string): string {
   if (id === CHANGE_META.venue.id) return CHANGE_META.venue.title;
   if (id === CHANGE_META.recovery.id) return CHANGE_META.recovery.title;
-  if (id === "CHG-3") return "Plan values reverted to the original launch plan";
+  if (id === "CHG-3") return "Plan put back to the original details";
   return "The plan changed";
 }

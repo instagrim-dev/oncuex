@@ -12,6 +12,7 @@ import {
   resolve,
   validateSnapshot,
 } from "./schema";
+import { flawedLegacySample } from "./evidence-trust";
 import type {
   Assessment,
   EvidenceRecord,
@@ -112,6 +113,10 @@ export function evaluate(
     const current: EvidenceRecord[] = [];
     const stale: Residual[] = [];
     for (const record of admissible) {
+      if (flawedLegacySample(record)) {
+        stale.push({ code: "source_excerpt_inconsistent", evidenceId: record.id });
+        continue;
+      }
       if (isExpired(record, now)) {
         stale.push({ code: "evidence_expired", evidenceId: record.id });
         continue;

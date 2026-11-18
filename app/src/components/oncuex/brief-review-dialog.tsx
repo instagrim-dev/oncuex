@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { useOperatorSession } from "@/hooks/use-operator-session";
 import {
-  type AiRun,
   type BriefProposal,
   callOncuexAI,
   validateBriefProposal,
@@ -31,7 +30,7 @@ interface BriefReviewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PROPOSAL_FIELDS = ["client", "project", "eventDate", "guestCount", "approvedBudget"];
+const PROPOSAL_FIELDS = ["client", "project", "eventDate", "guestCount", "approvedBudget", "timezone"];
 
 interface FormState {
   client: string;
@@ -84,12 +83,10 @@ export function BriefReviewDialog({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [run, setRun] = useState<AiRun | null>(null);
-  const [reviewedWithoutSpans, setReviewedWithoutSpans] = useState(false);
 
   const missingSpans = useMemo(() => {
     if (!proposal || mode !== "ai") return [];
-    const present = new Set(proposal.sourceSpans.map((span) => span.field));
+    const present = new Set(proposal.sourceSpans.filter((span) => span.quote.trim().length > 0 && SAMPLE_BRIEF_TEXT.includes(span.quote)).map((span) => span.field));
     return PROPOSAL_FIELDS.filter((field) => {
       const value = proposal[field as keyof BriefProposal];
       return value !== null && !present.has(field);
@@ -105,9 +102,10 @@ export function BriefReviewDialog({
     !form.timezone.trim() && "timezone",
   ].filter(Boolean) as string[];
 
+  const matchesPreparedBinder = form.client.trim() === BRIEF.client && form.project.trim() === BRIEF.project && form.eventDate === BRIEF.eventDate && Number(form.guestCount) === BRIEF.guestCount && Math.round(Number(form.budget) * 100) === BRIEF.approvedBudget.minorUnits;
   const canAdopt =
-    missing.length === 0 &&
-    (mode === "manual" || missingSpans.length === 0 || reviewedWithoutSpans);
+    missing.length === 0 && matchesPreparedBinder &&
+    (mode === "manual" || missingSpans.length === 0);
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -122,20 +120,16 @@ export function BriefReviewDialog({
     setLoading(false);
     if (!result.ok) {
       setError(result.error);
-      setRun(result.run);
       return;
     }
     const valid = validateBriefProposal(result.data);
     if (!valid.ok) {
       setError(valid.error);
-      setRun(result.run);
       return;
     }
     setProposal(valid.proposal);
     setForm(fromProposal(valid.proposal));
     setMode("ai");
-    setRun(result.run);
-    setReviewedWithoutSpans(false);
   };
 
   const useManualSample = () => {
@@ -148,15 +142,13 @@ export function BriefReviewDialog({
       timezone: BRIEF.timezone,
       openQuestions: BRIEF.openQuestions,
       sourceSpans: [],
-      uncertainties: ["Manual sample values, not a model extraction."],
+      uncertainties: ["These are the prepared sample details, typed by you."],
       questions: [],
     };
     setProposal(manual);
     setForm(fromProposal(manual));
     setMode("manual");
-    setRun(null);
     setError(null);
-    setReviewedWithoutSpans(true);
   };
 
   const adopt = () => {
@@ -183,8 +175,9 @@ export function BriefReviewDialog({
     };
     session.apply("Brief adopted", (current) => {
       adoptReviewedBrief(current, brief);
-      attachBaselineEvidence(current);
-      return "The brief is adopted and the prepared sample documents are attached.";
+      const isSample = brief.client === BRIEF.client && brief.project === BRIEF.project && brief.eventDate === BRIEF.eventDate && brief.guestCount === BRIEF.guestCount && brief.approvedBudget.minorUnits === BRIEF.approvedBudget.minorUnits;
+      if (isSample) attachBaselineEvidence(current);
+      return isSample ? "The brief is adopted and the prepared sample documents are attached." : "The brief is adopted. Sample documents were not attached to this project.";
     });
     onOpenChange(false);
   };
@@ -198,12 +191,13 @@ export function BriefReviewDialog({
             Review the client brief
           </DialogTitle>
           <DialogDescription>
-            Extract the facts from the brief, check every value against its source, then adopt
-            the brief. The proposal is not project data until you adopt it.
+            Here is what we read from the brief. Check the details against the source before they
+            go into the plan.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
+          <Note tone="warning">This binder currently contains the prepared fictional venue and budget. Only the matching sample brief can be adopted safely; other project details remain unsupported rather than inheriting sample commitments.</Note>
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-[12px] leading-5">
             {SAMPLE_BRIEF_TEXT}
           </div>
@@ -215,26 +209,19 @@ export function BriefReviewDialog({
               ) : (
                 <Sparkles className="size-3.5" />
               )}
-              {mode === "ai" ? "Extract again" : "Extract with AI"}
+              {mode === "ai" ? "Read it again" : "Read the brief"}
             </Button>
-            {mode === "ai" && <Chip tone="success">AI proposal</Chip>}
-            {mode === "manual" && <Chip tone="neutral">Manual sample</Chip>}
+            {mode === "ai" && <Chip tone="success">Read from the brief</Chip>}
+            {mode === "manual" && <Chip tone="neutral">Typed by you</Chip>}
             <Button size="sm" variant="ghost" onClick={useManualSample} disabled={loading}>
-              Use the prepared sample manually
+              Fill it in myself
             </Button>
           </div>
 
-          {run && (
-            <p className="text-[10.5px] text-muted-foreground">
-              AI response · {run.durationMs} ms ·{" "}
-              {run.responseId ? `reference ${run.responseId}` : run.detail}
-            </p>
-          )}
-
           {error && (
             <Note tone="danger" icon={FileText}>
-              <span className="font-medium">AI extraction unavailable.</span> {error} You can enter
-              the brief manually or use the prepared sample, clearly labelled.
+              <span className="font-medium">We couldn’t read the brief automatically.</span>{" "}
+              {error} You can type the details in yourself or use the prepared sample.
             </Note>
           )}
 
@@ -297,7 +284,7 @@ export function BriefReviewDialog({
                     onChange={(event) => update("timezone", event.target.value)}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Internal setting, not extracted from the brief.
+                    We set this for the sample. Edit it if needed.
                   </p>
                 </div>
               </div>
@@ -333,17 +320,19 @@ export function BriefReviewDialog({
                     value={form.circulationBuffer}
                     onChange={(event) => update("circulationBuffer", event.target.value)}
                   />
-                  <p className="text-[10px] text-muted-foreground">Internal planning setting.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    We set this for the sample.
+                  </p>
                 </div>
                 <p className="self-end text-[10.5px] text-muted-foreground">
-                  Event lead {BRIEF.owner.name} · fixed sample role, not extracted.
+                  {BRIEF.owner.name} is the event lead on this sample.
                 </p>
               </div>
 
               {proposal.uncertainties.length > 0 && (
                 <div className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warning">
-                    Uncertainties
+                    Still unclear
                   </p>
                   <ul className="mt-0.5 space-y-0.5">
                     {proposal.uncertainties.map((entry) => (
@@ -358,7 +347,7 @@ export function BriefReviewDialog({
               {proposal.questions.length > 0 && (
                 <div className="rounded-lg border border-border/60 px-3 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Questions to confirm
+                    Worth checking with the client
                   </p>
                   <ul className="mt-0.5 space-y-0.5">
                     {proposal.questions.map((entry) => (
@@ -373,7 +362,7 @@ export function BriefReviewDialog({
               {proposal.sourceSpans.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Source spans
+                    Where this came from
                   </p>
                   <ul className="space-y-1">
                     {proposal.sourceSpans.map((span) => (
@@ -389,18 +378,7 @@ export function BriefReviewDialog({
               )}
 
               {missingSpans.length > 0 && (
-                <label className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[11px] leading-5">
-                  <input
-                    type="checkbox"
-                    checked={reviewedWithoutSpans}
-                    onChange={(event) => setReviewedWithoutSpans(event.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    I reviewed the values without a supporting quote ({missingSpans.join(", ")})
-                    and corrected anything that was not stated.
-                  </span>
-                </label>
+                <p className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[11px] leading-5">The AI response did not provide source quotes for {missingSpans.join(", ")}. Read again or use the prepared manual sample; unsupported AI values cannot be adopted.</p>
               )}
 
               {missing.length > 0 && (
@@ -410,9 +388,8 @@ export function BriefReviewDialog({
               )}
 
               <Note tone="neutral" icon={CheckCircle2}>
-                Adopting the brief and adding the prepared sample documents uses the same commands
-                as the rest of the binder. The documents are prepared sample files, not live
-                partner confirmations.
+                Using this brief adds it to the plan and attaches the sample paperwork. The
+                paperwork is prepared for the sample, not a live partner confirmation.
               </Note>
             </div>
           )}
@@ -423,7 +400,7 @@ export function BriefReviewDialog({
             Cancel
           </Button>
           <Button size="sm" className="gap-1.5" disabled={!proposal || !canAdopt} onClick={adopt}>
-            Adopt brief and add sample documents
+            Use this brief and add the sample paperwork
             <ArrowRight className="size-3.5" />
           </Button>
         </DialogFooter>

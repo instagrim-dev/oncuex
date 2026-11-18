@@ -3,7 +3,11 @@ import type { useOperatorSession } from "@/hooks/use-operator-session";
 import { PM_ACTOR, reviewEvidence } from "@/oncuex/demo";
 import { BRIEF, sourceAttribution } from "@/oncuex/scenario";
 import { formatDate, formatMoney } from "@/oncuex/format";
-import { sourceState, sourceStateLabel } from "@/oncuex/presentation";
+import {
+  isSuperseded,
+  sourceState,
+  sourceStateLabel,
+} from "@/oncuex/presentation";
 import type { Brief, EvidenceRecord } from "@/oncuex/types";
 import { AlertTriangle, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -58,8 +62,8 @@ export function BudgetView({ session, onStartSample, onOpenTab }: BudgetViewProp
     session.apply(sourceAttribution(record), (current) => {
       reviewEvidence(current, record.id, disposition, "project_manager", PM_ACTOR);
       return disposition === "accepted"
-        ? "The budget document is reviewed and current."
-        : "The budget document is marked as needing a new version. No message was sent.";
+        ? "Marked as current."
+        : "Marked for a new version. Nothing was sent.";
     });
   };
 
@@ -68,7 +72,7 @@ export function BudgetView({ session, onStartSample, onOpenTab }: BudgetViewProp
       <Panel
         eyebrow="Budget"
         title={`${formatMoney(approved, currency)} approved`}
-        description="What the launch is committed to, by partner. If the plan moves, the committed total moves with it."
+        description="Working cost sheet · derived from the saved plan and its supporting documents. If the plan moves, these amounts update."
         actions={
           <Chip tone={delta > 0 ? "warning" : "success"}>
             {delta > 0 ? "Over budget" : "Inside budget"}
@@ -121,6 +125,7 @@ export function BudgetView({ session, onStartSample, onOpenTab }: BudgetViewProp
           </p>
         )}
 
+        {session.review.data.suggestions.filter((item) => item.projectId === snapshot.id && item.workArea.includes("Budget") && item.status === "concern").map((item) => <div key={item.id} className="mt-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs"><strong>Proposed, not approved:</strong> {item.title} · {item.excerpt}</div>)}
         <div className="mt-4 space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Commitments
@@ -159,34 +164,42 @@ export function BudgetView({ session, onStartSample, onOpenTab }: BudgetViewProp
           <ul className="space-y-2">
             {budgetDocuments.map((record) => {
               const state = sourceState(record, snapshot, store.now());
+              const superseded = isSuperseded(record, budgetDocuments, snapshot, store.now());
               return (
                 <li key={record.id} className="rounded-lg border border-border/60 px-3 py-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[12px] font-medium">{sourceAttribution(record)}</p>
                     <div className="flex items-center gap-1">
-                      <Chip tone={state === "confirmed" ? "success" : "warning"}>
-                        {sourceStateLabel(state)}
+                      <Chip
+                        tone={
+                          state === "confirmed" ? "success" : superseded ? "neutral" : "warning"
+                        }
+                      >
+                        {superseded ? "Replaced" : sourceStateLabel(state)}
                       </Chip>
-                      {state === "review" && (
+                      {superseded && (
+                        <span className="text-[10px] text-muted-foreground">Kept for reference</span>
+                      )}
+                      {!superseded && state === "review" && (
                         <Button
                           size="sm"
                           className="h-6 px-2 text-[10px]"
                           onClick={() => review(record, "accepted")}
                         >
-                          Mark reviewed
+                          Looks right
                         </Button>
                       )}
-                      {state === "update" && (
+                      {!superseded && state === "update" && (
                         <Button
                           size="sm"
                           variant="outline"
                           className="h-6 px-2 text-[10px]"
                           onClick={() => review(record, "rejected")}
                         >
-                          Mark for a new version
+                          Needs a new version
                         </Button>
                       )}
-                      {state === "confirmed" && (
+                      {!superseded && state === "confirmed" && (
                         <Button
                           size="sm"
                           variant="ghost"

@@ -7,6 +7,7 @@ import { PM_ACTOR, reviewEvidence } from "@/oncuex/demo";
 import { sourceAttribution } from "@/oncuex/scenario";
 import { formatDate, formatMoney } from "@/oncuex/format";
 import {
+  isSuperseded,
   requirementNote,
   sourceState,
   sourceStateLabel,
@@ -15,6 +16,8 @@ import type { Brief, EvidenceRecord } from "@/oncuex/types";
 import { ArrowRight, FileSearch } from "lucide-react";
 import { Chip, EmptyState, Panel } from "./ui-bits";
 import { cn } from "@/lib/utils";
+import { VenueComparison } from "./venue-comparison";
+import { DocumentSummary } from "./document-summary";
 
 interface PartnersViewProps {
   session: ReturnType<typeof useOperatorSession>;
@@ -72,7 +75,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
     },
     {
       id: "catering",
-      name: "Cedar & Salt",
+      name: snapshot.budget.commitments.find((item) => item.category === "catering")?.vendor ?? "Catering partner not recorded",
       role: "Catering",
       category: "catering",
       description: "Menu, covers and service for the reception.",
@@ -81,7 +84,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
     },
     {
       id: "production",
-      name: "Lantern Studio",
+      name: snapshot.budget.commitments.find((item) => item.category === "production")?.vendor ?? "Production partner not recorded",
       role: "Production",
       category: "production",
       description: "Scenic build, lighting and the run of show.",
@@ -90,7 +93,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
     },
     {
       id: "photography",
-      name: "Mira Okonjo",
+      name: snapshot.budget.commitments.find((item) => item.category === "photography")?.vendor ?? "Photographer not recorded",
       role: "Photography",
       category: "photography",
       description: `${snapshot.photographer.deliverables.editedImages} edited images within ${snapshot.photographer.deliverables.deliveryDays} days.`,
@@ -103,8 +106,8 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
     session.apply(sourceAttribution(record), (current) => {
       reviewEvidence(current, record.id, disposition, "project_manager", PM_ACTOR);
       return disposition === "accepted"
-        ? "The document is reviewed and current. The checklist and any sign-off will update."
-        : "The document is marked as not used or needing a new version. No message was sent.";
+        ? "Marked as current. The checklist and any sign-off will update."
+        : "Marked for a new version. Nothing was sent.";
     });
   };
 
@@ -113,7 +116,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
       <Panel
         eyebrow="Partners"
         title="The people making the launch happen"
-        description="Each partner, what they are providing, and the documents behind their work. A document is reviewed and current only while it still describes the plan."
+        description="The people making the launch happen, and the paperwork behind their work. It stays current only while it still matches the plan."
       >
         <div className="grid gap-3 lg:grid-cols-2">
           {partners.map((partner) => {
@@ -200,6 +203,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
                   ) : (
                     documents.map((record) => {
                       const state = sourceState(record, snapshot, store.now());
+                      const superseded = isSuperseded(record, documents, snapshot, store.now());
                       const expired = record.expiresAt <= store.now();
                       return (
                         <div
@@ -219,14 +223,16 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
                               tone={
                                 state === "confirmed"
                                   ? "success"
-                                  : state === "unused"
+                                  : state === "unused" || superseded
                                     ? "neutral"
                                     : "warning"
                               }
                             >
-                              {expired
-                                ? `Expired ${formatDate(record.expiresAt)}`
-                                : sourceStateLabel(state)}
+                              {superseded
+                                ? "Replaced"
+                                : expired
+                                  ? `Expired ${formatDate(record.expiresAt)}`
+                                  : sourceStateLabel(state)}
                             </Chip>
                           </div>
                           <p className="mt-1 line-clamp-2 text-[10.5px] italic leading-4 text-muted-foreground">
@@ -238,14 +244,19 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
                               {formatDate(record.expiresAt)}
                             </p>
                             <div className="flex gap-1">
-                              {state === "review" && (
+                              {superseded && (
+                                <span className="self-center text-[9.5px] text-muted-foreground">
+                                  Kept for reference
+                                </span>
+                              )}
+                              {!superseded && state === "review" && (
                                 <>
                                   <Button
                                     size="sm"
                                     className="h-6 px-2 text-[10px]"
                                     onClick={() => review(record, "accepted")}
                                   >
-                                    Mark reviewed
+                                    Looks right
                                   </Button>
                                   <Button
                                     size="sm"
@@ -257,17 +268,17 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
                                   </Button>
                                 </>
                               )}
-                              {state === "update" && (
+                              {!superseded && state === "update" && (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="h-6 px-2 text-[10px]"
                                   onClick={() => review(record, "rejected")}
                                 >
-                                  Mark for a new version
+                                  Needs a new version
                                 </Button>
                               )}
-                              {state === "confirmed" && (
+                              {!superseded && state === "confirmed" && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -277,7 +288,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
                                   Not used
                                 </Button>
                               )}
-                              {state === "unused" && !expired && (
+                              {!superseded && state === "unused" && !expired && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -309,6 +320,8 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
           })}
         </div>
       </Panel>
+      <DocumentSummary session={session} />
+      <VenueComparison session={session} />
     </div>
   );
 }

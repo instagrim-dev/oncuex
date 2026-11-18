@@ -1,5 +1,5 @@
 import type { useOperatorSession } from "@/hooks/use-operator-session";
-import { activityEntries } from "@/oncuex/activity";
+import { timelineEntries } from "@/oncuex/timeline";
 import { sourceAttribution } from "@/oncuex/scenario";
 import { formatDate } from "@/oncuex/format";
 import { History } from "lucide-react";
@@ -12,15 +12,15 @@ import {
 } from "@/components/ui/sheet";
 import { Chip } from "./ui-bits";
 
-interface ActivitySheetProps {
+interface TimelineSheetProps {
   session: ReturnType<typeof useOperatorSession>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function ActivitySheet({ session, open, onOpenChange }: ActivitySheetProps) {
+export function TimelineSheet({ session, open, onOpenChange }: TimelineSheetProps) {
   const store = session.store;
-  const entries = activityEntries(store);
+  const entries = timelineEntries(store);
   const removed = store.archivedEvidence;
 
   return (
@@ -32,10 +32,10 @@ export function ActivitySheet({ session, open, onOpenChange }: ActivitySheetProp
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <History className="size-4" aria-hidden />
-            Activity
+            Timeline
           </SheetTitle>
           <SheetDescription>
-            Recent updates, document confirmations and sign-offs, in order.
+            Changes, decisions, paperwork reviews and sign-offs, in order.
           </SheetDescription>
         </SheetHeader>
 

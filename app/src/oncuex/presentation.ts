@@ -1,5 +1,6 @@
 import { minutes } from "@/oncuex/engine";
 import { bindingMatches } from "@/oncuex/schema";
+import { flawedLegacySample } from "@/oncuex/evidence-trust";
 import { REQUIREMENTS } from "@/oncuex/scenario";
 import { formatMoney, residualText } from "@/oncuex/format";
 import type {
@@ -39,12 +40,28 @@ export function sourceState(
   now: string,
 ): SourceState {
   if (record.reviewDisposition === "rejected") return "unused";
+  if (flawedLegacySample(record)) return "update";
   if (record.expiresAt && record.expiresAt <= now) return "update";
   if (record.reviewDisposition === "pending") return "review";
   const changed = Object.entries(record.boundFieldVersions).some(
     ([path, bound]) => !bindingMatches(path, bound, snapshot),
   );
   return changed ? "update" : "confirmed";
+}
+
+export function isSuperseded(
+  record: EvidenceRecord,
+  siblings: EvidenceRecord[],
+  snapshot: ProjectState,
+  now: string,
+): boolean {
+  if (sourceState(record, snapshot, now) !== "update") return false;
+  return siblings.some(
+    (other) =>
+      other.id !== record.id &&
+      other.requirementId === record.requirementId &&
+      sourceState(other, snapshot, now) === "confirmed",
+  );
 }
 
 export function sourceStateLabel(state: SourceState): string {
@@ -65,26 +82,26 @@ export function checklistState(result: RequirementResult | undefined): {
   detail: string;
   tone: "done" | "waiting" | "needs" | "idle";
 } {
-  if (!result) return { label: "Not assessed", detail: "", tone: "idle" };
+  if (!result) return { label: "Not checked yet", detail: "", tone: "idle" };
   if (result.status === "supported") {
-    return { label: "Supporting checks pass", detail: "", tone: "done" };
+    return { label: "Checks pass", detail: "", tone: "done" };
   }
   if (result.status === "missing") {
-    return { label: "No usable document yet", detail: "", tone: "idle" };
+    return { label: "No paperwork yet", detail: "", tone: "idle" };
   }
   const residual = result.residuals[0];
   const detail = residual ? residualText(residual) : "";
   if (result.status === "outdated") {
     return { label: "Needs an update", detail, tone: "needs" };
   }
-  return { label: "Needs review", detail, tone: "waiting" };
+  return { label: "Needs a look", detail, tone: "waiting" };
 }
 
 export interface PlanException {
   id: string;
   title: string;
   detail: string;
-  tab: "checklist" | "timeline" | "budget" | "partners";
+  tab: "checklist" | "itinerary" | "budget" | "partners";
   anchor: string;
 }
 
@@ -121,7 +138,7 @@ export function planExceptions(
       detail: `The ${snapshot.crew.arrivalTime} crew call plus ${setup} minutes setup reaches ${formatTime(
         crewReach,
       )}; access closes at ${snapshot.location.loadingWindow.end}.`,
-      tab: "timeline",
+      tab: "itinerary",
       anchor: "timeline-setup",
     });
   }
@@ -148,7 +165,7 @@ export function planExceptions(
       detail: `Run of show ends at ${snapshot.production.runOfShowEnd}; with a ${margin} minute margin the room is needed until ${formatTime(
         showEnd + margin,
       )}, but the hard stop is ${snapshot.location.hardStop}.`,
-      tab: "timeline",
+      tab: "itinerary",
       anchor: "timeline-runofshow",
     });
   }

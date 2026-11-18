@@ -11,7 +11,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ActivitySheet } from "@/components/oncuex/activity-sheet";
+import { TimelineSheet } from "@/components/oncuex/timeline-sheet";
+import { ActivityDialog, SourcesDialog } from "@/components/oncuex/source-activity";
 import { BriefReviewDialog } from "@/components/oncuex/brief-review-dialog";
 import { ClientUpdateDialog } from "@/components/oncuex/client-update-dialog";
 import { BudgetView } from "@/components/oncuex/budget-view";
@@ -20,24 +21,29 @@ import { EventView } from "@/components/oncuex/event-view";
 import { Header } from "@/components/oncuex/header";
 import { PartnersView } from "@/components/oncuex/partners-view";
 import { SignOffDialog } from "@/components/oncuex/signoff-dialog";
-import { TimelineView } from "@/components/oncuex/timeline-view";
+import { ItineraryView } from "@/components/oncuex/itinerary-view";
 import { useOperatorSession } from "@/hooks/use-operator-session";
 import { loadBaseline } from "@/oncuex/demo";
+import { timelineEntries } from "@/oncuex/timeline";
+import { flawedLegacySample } from "@/oncuex/evidence-trust";
 import { hasBrief as isBriefAdopted } from "@/oncuex/engine";
 import type { Assessment, Eligibility } from "@/oncuex/types";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: CalendarDays },
   { id: "checklist", label: "Checklist", icon: ListChecks },
-  { id: "timeline", label: "Timeline", icon: Clock3 },
+  { id: "itinerary", label: "Itinerary", icon: Clock3 },
   { id: "budget", label: "Budget", icon: Wallet },
   { id: "partners", label: "Partners", icon: Handshake },
 ];
 
 const Index = () => {
   const session = useOperatorSession();
-  const [tab, setTab] = useState("overview");
+  const review = session.review;
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [tab, setTab] = useState("overview");
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [signOffOpen, setSignOffOpen] = useState(false);
   const [briefReviewOpen, setBriefReviewOpen] = useState(false);
   const [clientUpdateOpen, setClientUpdateOpen] = useState(false);
@@ -100,7 +106,7 @@ const Index = () => {
       <Header
         session={session}
         onOpenSignOff={() => setSignOffOpen(true)}
-        onOpenActivity={() => setActivityOpen(true)}
+        onOpenTimeline={() => setTimelineOpen(true)}
         onReloadSample={session.reloadSample}
         theme={theme}
         onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
@@ -118,6 +124,9 @@ const Index = () => {
             </div>
           )}
 
+          {store.evidence.some(flawedLegacySample) && (
+            <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs leading-5">This saved record contains earlier sample excerpts with known source inconsistencies. Its history has been preserved; review or export it before reloading the corrected sample. Affected checks and sign-offs are treated as needing review rather than relying on those excerpts.</div>
+          )}
           {session.error && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12.5px] leading-5 text-destructive">
               <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -166,6 +175,10 @@ const Index = () => {
           )}
         </div>
 
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-panel">
+          <div><p className="text-sm font-semibold">Source review</p><p className="text-xs text-muted-foreground">{review.data.suggestions.filter((item) => ["needs_review", "deferred", "clarification"].includes(item.status)).length} need review · {review.data.suggestions.filter((item) => item.status === "concern").length} open concerns</p></div>
+          <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setSourcesOpen(true)}>Sources</Button><Button size="sm" onClick={() => setActivityOpen(true)}>Activity</Button></div>
+        </div>
         <Tabs value={tab} onValueChange={setTab} className="w-full">
           <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1.5 shadow-panel scrollbar-thin">
             {TABS.map((item) => {
@@ -193,7 +206,7 @@ const Index = () => {
               assessment={assessment}
               onOpenTab={setTab}
               onStartSample={startSample}
-              onOpenActivity={() => setActivityOpen(true)}
+              onOpenTimeline={() => setTimelineOpen(true)}
               onOpenSignOff={() => setSignOffOpen(true)}
               onReviewBrief={() => setBriefReviewOpen(true)}
               onOpenClientUpdate={() => setClientUpdateOpen(true)}
@@ -207,11 +220,12 @@ const Index = () => {
               assessment={assessment}
               onStartSample={startSample}
               onOpenTab={setTab}
+              onOpenActivity={() => setActivityOpen(true)}
             />
           </TabsContent>
 
-          <TabsContent value="timeline" className="mt-4 animate-fade-rise focus-visible:outline-none">
-            <TimelineView session={session} onStartSample={startSample} onOpenTab={setTab} />
+          <TabsContent value="itinerary" className="mt-4 animate-fade-rise focus-visible:outline-none">
+            <ItineraryView session={session} onStartSample={startSample} onOpenTab={setTab} />
           </TabsContent>
 
           <TabsContent value="budget" className="mt-4 animate-fade-rise focus-visible:outline-none">
@@ -227,17 +241,19 @@ const Index = () => {
       <footer className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-5 pt-2 text-[10.5px] text-muted-foreground md:px-8">
         <span className="font-medium text-foreground/70">OnCueX</span>
         <span aria-hidden>·</span>
-        <span>Northwind Provisions · Spring product launch</span>
+        <span>{briefReady ? (store.snapshot().brief as { project: string }).project : "No event adopted"}</span>
         <span aria-hidden>·</span>
         <span>
           Sample event · simulated role · saved on this device · no authentication
         </span>
       </footer>
 
-      <ActivitySheet
+      <SourcesDialog review={review} open={sourcesOpen} onOpenChange={setSourcesOpen} onActivity={() => { setSourcesOpen(false); setActivityOpen(true); }} />
+      <ActivityDialog review={review} open={activityOpen} onOpenChange={setActivityOpen} projectId={store.snapshot().id} revision={store.assessmentRevision} history={timelineEntries(store).map((item) => `${item.title} · ${item.detail}`)} onSources={() => { setActivityOpen(false); setSourcesOpen(true); }} onWork={() => { setActivityOpen(false); setTab("checklist"); }} />
+      <TimelineSheet
         session={session}
-        open={activityOpen}
-        onOpenChange={setActivityOpen}
+        open={timelineOpen}
+        onOpenChange={setTimelineOpen}
       />
       <SignOffDialog
         session={session}

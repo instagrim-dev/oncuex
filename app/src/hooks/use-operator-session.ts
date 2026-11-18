@@ -4,6 +4,8 @@ import { describeCommandError, Store } from "@/oncuex/store";
 import { hasBrief } from "@/oncuex/engine";
 import { PERSONAS, REQUIREMENTS, initialProject } from "@/oncuex/scenario";
 import { loadBaseline } from "@/oncuex/demo";
+import { useSourceReview } from "@/hooks/use-source-review";
+import { emptyReview, isReviewData } from "@/oncuex/source-review";
 import type { Role } from "@/oncuex/types";
 
 const STORAGE_KEY = "oncuex.operator.record.v2";
@@ -98,6 +100,8 @@ export interface ReloadCheck {
 }
 
 export function useOperatorSession() {
+  const review = useSourceReview();
+  const replaceReview = review.replace;
   const [bootState] = useState(boot);
   const storeRef = useRef(bootState.store);
   const [version, setVersion] = useState(0);
@@ -162,13 +166,14 @@ export function useOperatorSession() {
       // Storage may be unavailable; the in-memory blank state still works.
     }
     storeRef.current = freshStore();
+    replaceReview(emptyReview());
     setSavedAt(null);
     setReloadCheck(null);
     setPersonaId(PERSONAS[0].id);
     setFlash("A blank event is ready. You can start with the sample plan when you are.");
     setError(null);
     setVersion((current) => current + 1);
-  }, []);
+  }, [replaceReview]);
 
   const reloadSample = useCallback(() => {
     try {
@@ -234,27 +239,30 @@ export function useOperatorSession() {
   const restoreFromFile = useCallback(async (file: File) => {
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);
-      const restored = Store.fromExport(parsed);
+      const parsed: unknown = JSON.parse(text);
+      const bundle = parsed && typeof parsed === "object" && "oncuexProjectBundleVersion" in parsed ? parsed as { oncuexProjectBundleVersion: unknown; project: unknown; sourceReview: unknown } : null;
+      if (bundle && (bundle.oncuexProjectBundleVersion !== 1 || !isReviewData(bundle.sourceReview))) throw new Error("The source review data is invalid.");
+      const restored = Store.fromExport(bundle ? bundle.project : parsed);
       const persisted = persist(restored);
       storeRef.current = restored;
+      if (bundle && isReviewData(bundle.sourceReview)) replaceReview(bundle.sourceReview);
       setSavedAt(persisted.savedAt);
       setReloadCheck({
         ok: true,
         detail: "Project data restored from a validated export.",
       });
-      setFlash("Project data restored. The checklist, activity and sign-offs were replayed.");
+      setFlash("Project data restored. The checklist, timeline and sign-offs were replayed.");
       setError(persisted.warning);
     } catch (error) {
       setFlash(null);
       setError(`The project data could not be restored: ${describeCommandError(error)}`);
     }
     setVersion((current) => current + 1);
-  }, []);
+  }, [replaceReview]);
 
   const downloadExport = useCallback(() => {
     const store = storeRef.current;
-    const blob = new Blob([JSON.stringify(store.export(), null, 2)], {
+    const blob = new Blob([JSON.stringify({ oncuexProjectBundleVersion: 1, project: store.export(), sourceReview: review.data }, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -265,7 +273,7 @@ export function useOperatorSession() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-  }, []);
+  }, [review.data]);
 
   const clearMessages = useCallback(() => {
     setError(null);
@@ -274,6 +282,7 @@ export function useOperatorSession() {
 
   return {
     store: storeRef.current,
+    review,
     version,
     persona,
     personaId,

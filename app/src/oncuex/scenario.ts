@@ -161,12 +161,12 @@ export const CHANGE_META = {
     id: "CHG-1",
     title: "Venue moved to Pier 9 Loft",
     claim:
-      "The client selected Pier 9 Loft. Freight access, licensed occupancy and the hard stop are taken from the venue pack; the budget line switches to the loft fee.",
+      "The producer adopts the fictional Pier 9 proposal for this sample. Freight access, licensed occupancy and the hard stop are taken from the venue pack; this does not imply client approval.",
     sourceRefIds: ["SRC-3", "SRC-12"],
   },
   recovery: {
     id: "CHG-2",
-    title: "Recovered plan: annex, rescoped spend, revised schedule",
+    title: "Venue, budget and schedule updated for the annex",
     claim:
       "The adjoining annex raises occupancy and extends freight access. Catering and production are rescoped to recover the budget, and the crew call and run of show move to fit the annex access window.",
     sourceRefIds: ["SRC-3", "SRC-6", "SRC-7", "SRC-8", "SRC-9", "SRC-10", "SRC-12"],

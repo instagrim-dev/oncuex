@@ -7,7 +7,7 @@ import type { Brief } from "@/oncuex/types";
 import { AlertTriangle, CalendarDays, Clock3 } from "lucide-react";
 import { EmptyState, Panel } from "./ui-bits";
 
-interface TimelineViewProps {
+interface ItineraryViewProps {
   session: ReturnType<typeof useOperatorSession>;
   onStartSample: () => void;
   onOpenTab: (tab: string) => void;
@@ -24,7 +24,7 @@ interface TimelineEntry {
 const clock = (total: number) =>
   `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 
-export function TimelineView({ session, onStartSample, onOpenTab }: TimelineViewProps) {
+export function ItineraryView({ session, onStartSample, onOpenTab }: ItineraryViewProps) {
   const store = session.store;
   const snapshot = store.snapshot();
   const briefReady = Boolean((snapshot.brief as { client?: string }).client);
@@ -32,7 +32,7 @@ export function TimelineView({ session, onStartSample, onOpenTab }: TimelineView
 
   if (!briefReady) {
     return (
-      <Panel eyebrow="Timeline" title="The day starts with the event">
+      <Panel eyebrow="Itinerary" title="The itinerary starts with the event">
         <EmptyState
           icon={CalendarDays}
           title="No event day yet"
@@ -131,9 +131,9 @@ export function TimelineView({ session, onStartSample, onOpenTab }: TimelineView
   return (
     <div className="space-y-4">
       <Panel
-        eyebrow="Timeline"
+        eyebrow="Itinerary"
         title={`${formatDate(brief.eventDate)} · ${snapshot.location.venueName}`}
-        description="The shape of the day for the launch."
+        description="The current running order for the event day."
         actions={
           <Button size="sm" variant="ghost" onClick={() => onOpenTab("checklist")}>
             Open the checklist

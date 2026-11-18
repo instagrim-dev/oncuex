@@ -1,14 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "@/components/oncuex/settings-dialog";
 import type { useOperatorSession } from "@/hooks/use-operator-session";
-import { BRIEF } from "@/oncuex/scenario";
+import type { Brief } from "@/oncuex/types";
 import { formatDate } from "@/oncuex/format";
 import { CheckCircle2, History, Layers3, Moon, Sun } from "lucide-react";
 
 interface HeaderProps {
   session: ReturnType<typeof useOperatorSession>;
   onOpenSignOff: () => void;
-  onOpenActivity: () => void;
+  onOpenTimeline: () => void;
   onReloadSample: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -17,12 +17,14 @@ interface HeaderProps {
 export function Header({
   session,
   onOpenSignOff,
-  onOpenActivity,
+  onOpenTimeline,
   onReloadSample,
   theme,
   onToggleTheme,
 }: HeaderProps) {
   const store = session.store;
+  const snapshot = store.snapshot();
+  const brief = (snapshot.brief as Partial<Brief>);
   const latest = store.latestDecision();
   const signedOff = latest ? store.currentness(latest.id) === "current" : false;
   return (
@@ -41,9 +43,9 @@ export function Header({
         <div className="hidden h-7 w-px bg-border sm:block" aria-hidden />
 
         <div className="hidden min-w-0 sm:block">
-          <p className="truncate text-[12.5px] font-medium leading-5">{BRIEF.project}</p>
+          <p className="truncate text-[12.5px] font-medium leading-5">{brief.project || "No event adopted"}</p>
           <p className="truncate text-[10.5px] text-muted-foreground">
-            {BRIEF.client} · {formatDate(BRIEF.eventDate)}
+            {brief.client || "Client not set"}{brief.eventDate ? ` · ${formatDate(brief.eventDate)}` : ""}
           </p>
         </div>
 
@@ -61,10 +63,10 @@ export function Header({
             variant="ghost"
             size="sm"
             className="h-8 gap-1.5 px-2 text-[11.5px]"
-            onClick={onOpenActivity}
+            onClick={onOpenTimeline}
           >
             <History className="size-3.5" />
-            <span className="hidden sm:inline">Activity</span>
+            <span className="hidden sm:inline">History</span>
           </Button>
           <SettingsDialog session={session} onReloadSample={onReloadSample} />
           <Button

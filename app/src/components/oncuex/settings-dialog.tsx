@@ -86,7 +86,7 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
               </DialogClose>
               {confirmReset ? (
                 <div className="flex items-center gap-2 rounded-md border border-border/70 px-2 py-1">
-                  <span className="text-[11px] text-muted-foreground">Clear this device’s plan?</span>
+                  <span className="text-[11px] text-muted-foreground">Clear this device’s plan and source reviews?</span>
                   <DialogClose asChild>
                     <Button size="sm" variant="outline" onClick={session.reset}>
                       Yes, start over
@@ -109,8 +109,7 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
               Project data
             </h3>
             <p className="text-[12px] leading-5 text-muted-foreground">
-              Lossless JSON for replay: current state, documents, removed documents, activity and
-              sign-off scope. Restoring validates the whole export before replacing the open plan.
+              A copy of the plan, paperwork, sign-off history and source reviews. Restoring checks the file before replacing what is open. Older plan-only exports leave source reviews unchanged.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -144,7 +143,7 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
               Export v{exportDoc.exportVersion} · {exportDoc.evidence.length} documents ·{" "}
               {exportDoc.archivedEvidence.length} kept for reference ·{" "}
               {exportDoc.decisions.length} sign-off{exportDoc.decisions.length === 1 ? "" : "s"} ·{" "}
-              {exportDoc.events.length} activity entries
+              {exportDoc.events.length} timeline entries
             </p>
           </section>
 
@@ -238,8 +237,8 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
               </div>
 
               <p className="text-[10px] text-muted-foreground">
-                Record: {exportDoc.counters.sequence} activity entries · sign-off scope is preserved
-                in Activity. The fixed Rowan role is simulated, not authenticated.
+                Record: {exportDoc.counters.sequence} timeline entries · sign-off scope is preserved
+                in the Timeline. The fixed Rowan role is simulated, not authenticated.
               </p>
             </div>
           </details>

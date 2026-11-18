@@ -88,8 +88,8 @@ export const formatFieldValue = (path: string, value: unknown): string => {
 };
 
 export const statusLabel: Record<RequirementStatus, string> = {
-  supported: "Confirmed",
-  missing: "Not confirmed",
+  supported: "Supporting checks pass",
+  missing: "No usable document yet",
   outdated: "Needs an update",
   blocked: "Needs attention",
 };
@@ -105,21 +105,23 @@ export const humanCode = (code: string): string => code.replace(/_/g, " ");
 export const residualText = (residual: Residual): string => {
   switch (residual.code) {
     case "mandatory_evidence_missing":
-      return "No usable document has been received for this item yet.";
+      return "No paperwork for this yet.";
     case "evidence_expired":
-      return "The document for this item has expired.";
+      return "This paperwork has expired.";
+    case "source_excerpt_inconsistent":
+      return "This earlier sample excerpt does not support the recorded check and needs a corrected source.";
     case "bound_field_changed":
-      return "The plan changed after this document was received.";
+      return "The plan moved after this came in.";
     case "predicate_false":
-      return "The current plan values do not meet this item.";
+      return "The plan doesn’t quite meet this yet.";
     case "prerequisite_not_supported": {
       const names = (residual.prerequisiteIds ?? []).map(requirementLabel);
       return `Waiting on ${names.join(", ")}.`;
     }
     case "prerequisite_cycle":
-      return "The dependencies form a loop; this needs a decision.";
+      return "These dependencies loop back; someone will need to untangle them.";
     case "prerequisite_conflict":
-      return `Two dependencies disagree about ${fieldLabel(String(residual.field))}; this needs a decision.`;
+      return `Two requirements disagree about ${fieldLabel(String(residual.field))}; someone needs to settle it.`;
     default:
       return "This item needs attention.";
   }
@@ -127,19 +129,20 @@ export const residualText = (residual: Residual): string => {
 
 export const eligibilityText: Record<string, string> = {
   role_denied: "Only the event lead can sign off this plan.",
-  mandatory_requirements_not_supported: "Some checklist items still need attention.",
-  mandatory_evidence_expired: "A document this plan relies on has expired.",
-  integration_failed: "A few details do not fit together yet.",
-  requirement_set_changed: "The scope changed after the last sign-off.",
+  mandatory_requirements_not_supported: "A few checklist items still need a look.",
+  mandatory_evidence_expired: "Some paperwork the plan relies on has expired.",
+  integration_failed: "The day doesn’t quite fit together yet.",
+  requirement_set_changed: "The plan’s scope changed since the last sign-off.",
   revision_lineage_changed: "The plan has moved since the last sign-off.",
   stale_revision: "The plan changed after the last sign-off.",
 };
 
 export const decisionReasonText: Record<string, string> = {
+  source_excerpt_inconsistent: "A historical sample excerpt does not support the recorded check.",
   stale_decision: "The plan changed after this sign-off.",
   revision_lineage_changed: "The plan has moved since this sign-off.",
   requirement_set_changed: "The scope changed after this sign-off.",
-  mandatory_evidence_expired: "A document this sign-off relied on has expired.",
+  mandatory_evidence_expired: "Paperwork this sign-off relied on has expired.",
 };
 
 export const roleLabel = (role: Role): string =>

@@ -512,7 +512,8 @@ export function runSelfChecks(): SelfCheckReport {
     const total = counts.supported + counts.blocked + counts.outdated + counts.missing;
     return total === counts.blocking ? true : `${total} != ${counts.blocking}`;
   });
-  check("Command invariants", "A prerequisite cycle blocks its members instead of passing", () => {    const requirements = [
+  check("Command invariants", "A prerequisite cycle blocks its members instead of passing", () => {
+    const requirements = [
       syntheticRequirement("REQ-a-1", { prerequisiteIds: ["REQ-b-1"] }),
       syntheticRequirement("REQ-b-1", { prerequisiteIds: ["REQ-a-1"] }),
     ];

@@ -320,7 +320,7 @@
     {
       "id": "SRC-4",
       "kind": "photo_plan",
-      "excerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 240,000 USD.",
+      "excerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 2,400 USD.",
       "attribution": "Photography scope, section 2",
       "trust": "untrusted_for_instructions"
     },
@@ -378,6 +378,20 @@
       "kind": "internal_note",
       "excerpt": "Budget reconciliation. Foundry Hall plan: venue 9,500; catering 11,000; production 6,200; photography 2,400; total 29,100 USD. Pier 9 Loft plan before recovery: venue 11,850; catering 11,000; production 6,200; photography 2,400; total 31,450 USD. Pier 9 Loft plan after recovery: venue including annex 12,450; catering rescoped 8,950; production reduced build 5,850; photography 2,400; total 29,650 USD.",
       "attribution": "Finance reconciliation, revision 3",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-13",
+      "kind": "vendor_document",
+      "excerpt": "Foundry Hall: fire and occupancy attestation reviewed, valid to 2027-03-10.",
+      "attribution": "Fictional Foundry Hall attestation, page 1",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-14",
+      "kind": "internal_note",
+      "excerpt": "Run of show ends at 22:00; Foundry Hall hard stop is 23:00.",
+      "attribution": "Fictional production schedule, line 1",
       "trust": "untrusted_for_instructions"
     }
   ],
@@ -448,10 +462,10 @@
       "requirementId": "REQ-production-runofshow-1",
       "type": "document",
       "sourceRefIds": [
-        "SRC-5"
+        "SRC-14", "SRC-2"
       ],
-      "sourceExcerpt": "Crew call 07:00, 45 minutes to first scenic panel.",
-      "contentDigest": "sha256:2ded8c074564f87e39bd2f9544e34055e0985c5f8c89e4c3a681a926637f3631",
+      "sourceExcerpt": "Run of show ends at 22:00; Foundry Hall hard stop is 23:00.",
+      "contentDigest": "sha256:864fe51937256b4aebd41fad26f2a0c3018beca30ce2de52e50ce959292254d5",
       "artifactRef": "synthetic://REQ-production-runofshow-1/EV-4.pdf",
       "issuer": "CON-ana",
       "observedAt": "2027-02-21T10:00:00Z",
@@ -487,10 +501,10 @@
       "requirementId": "REQ-fire-permit-1",
       "type": "document",
       "sourceRefIds": [
-        "SRC-2"
+        "SRC-13"
       ],
-      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
-      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+      "sourceExcerpt": "Foundry Hall: fire and occupancy attestation reviewed, valid to 2027-03-10.",
+      "contentDigest": "sha256:2cddc3729cb7126fe42351d824d1676929a9e797eae7f9ca45c258705ecd3995",
       "artifactRef": "synthetic://REQ-fire-permit-1/EV-6.pdf",
       "issuer": "VEN-A",
       "observedAt": "2027-02-20T09:00:00Z",
@@ -509,8 +523,8 @@
         "SRC-4",
         "SRC-11"
       ],
-      "sourceExcerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 240,000 USD.",
-      "contentDigest": "sha256:ae74af97627555a28aea7dc9bca214bcea190a50ecdd60aa314381b7d69b751e",
+      "sourceExcerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 2,400 USD.",
+      "contentDigest": "sha256:ad7b2994c4c4aa90d4798d1c365b077ccd5d4eb64dd38397a121df116b207408",
       "artifactRef": "synthetic://REQ-photographer-deliverables-1/EV-7.pdf",
       "issuer": "CON-priya",
       "observedAt": "2027-02-18T15:00:00Z",

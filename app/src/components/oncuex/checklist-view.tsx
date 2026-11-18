@@ -26,6 +26,7 @@ interface ChecklistViewProps {
   assessment: Assessment | null;
   onStartSample: () => void;
   onOpenTab: (tab: string) => void;
+  onOpenActivity: () => void;
 }
 
 export function ChecklistView({
@@ -33,6 +34,7 @@ export function ChecklistView({
   assessment,
   onStartSample,
   onOpenTab,
+  onOpenActivity,
 }: ChecklistViewProps) {
   const store = session.store;
   const snapshot = store.snapshot();
@@ -79,10 +81,10 @@ export function ChecklistView({
         id="checklist-support"
         eyebrow="Checklist"
         title="The work behind the launch"
-        description="The work the launch needs, grouped by work area. A row shows whether its supporting checks pass, not whether the real-world task is complete. Open a row for its documents and findings."
+        description="The work the launch needs, grouped by area. Open a row for the paperwork behind it."
         actions={
           <span className="text-[11.5px] text-muted-foreground">
-            {done} of {total} supporting checks pass
+            {done} of {total} checks pass
           </span>
         }
       >
@@ -110,9 +112,10 @@ export function ChecklistView({
                 <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-1">
                   <h3 className="text-[14px] font-semibold">{area.label}</h3>
                   <span className="text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
-                    {areaDone}/{areaRequirements.length} supporting checks
+                    {areaDone}/{areaRequirements.length} checks
                   </span>
                 </div>
+                {session.review.data.suggestions.filter((item) => item.status === "concern" && item.projectId === snapshot.id && item.workArea.toLowerCase().includes(area.label.toLowerCase())).map((item) => <div key={item.id} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs"><span className="font-medium">Open concern:</span> {item.title} · Sources: {item.sourceIds.join(", ")} · <button type="button" className="underline underline-offset-2" onClick={onOpenActivity}>Review in Activity</button></div>)}
 
                 <ul className="space-y-1.5">
                   {areaRequirements.map((requirement) => {
@@ -132,9 +135,18 @@ export function ChecklistView({
                     const documents = store.evidence.filter(
                       (record) => record.requirementId === requirement.id,
                     );
-                    const currentDocuments = documents.filter(
+                    const activeDocuments = documents.filter(
                       (record) => sourceState(record, snapshot, store.now()) !== "unused",
                     );
+                    const hasCurrent = activeDocuments.some(
+                      (record) => sourceState(record, snapshot, store.now()) === "confirmed",
+                    );
+                    const currentDocuments = hasCurrent
+                      ? activeDocuments.filter(
+                          (record) => sourceState(record, snapshot, store.now()) !== "update",
+                        )
+                      : activeDocuments;
+                    const earlierDocuments = activeDocuments.length - currentDocuments.length;
                     return (
                       <li
                         key={requirement.id}
@@ -188,7 +200,7 @@ export function ChecklistView({
 
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground">
                             {currentDocuments.length === 0 ? (
-                              <span>No document yet</span>
+                              <span>No paperwork yet</span>
                             ) : (
                               currentDocuments.map((record) => {
                                 const source = sourceState(record, snapshot, store.now());
@@ -201,6 +213,12 @@ export function ChecklistView({
                                   </span>
                                 );
                               })
+                            )}
+                            {earlierDocuments > 0 && (
+                              <span>
+                                {earlierDocuments} earlier version
+                                {earlierDocuments === 1 ? "" : "s"} kept for reference
+                              </span>
                             )}
                           </div>
                         </div>
@@ -226,8 +244,8 @@ export function ChecklistView({
             Open the partners
             <ArrowRight className="size-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => onOpenTab("timeline")}>
-            See the day timeline
+          <Button size="sm" variant="ghost" onClick={() => onOpenTab("itinerary")}>
+            See the itinerary
           </Button>
         </div>
       </Panel>

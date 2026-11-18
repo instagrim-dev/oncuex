@@ -4,7 +4,7 @@ import { formatDate } from "@/oncuex/format";
 import type { EvidenceRecord, EventRecord } from "@/oncuex/types";
 import type { Store } from "@/oncuex/store";
 
-export interface ActivityEntry {
+export interface TimelineEntry {
   key: string;
   title: string;
   detail: string;
@@ -12,7 +12,7 @@ export interface ActivityEntry {
   currentness?: "current" | "historical";
 }
 
-export function activityEntries(store: Store): ActivityEntry[] {
+export function timelineEntries(store: Store): TimelineEntry[] {
   const findSource = (id: string): EvidenceRecord | undefined =>
     store.evidence.find((record) => record.id === id) ??
     store.archivedEvidence.find((entry) => entry.evidence.id === id)?.evidence;
@@ -23,42 +23,42 @@ export function activityEntries(store: Store): ActivityEntry[] {
       case "brief.adopted":
         return {
           key: event.id,
-          title: "Plan started from the Northwind brief",
+          title: "Plan started from the adopted brief",
           detail: `${actor} adopted the launch brief and approved budget.`,
         };
       case "evidence.attached": {
         const source = findSource(String(event.payload.evidenceId ?? ""));
         return {
           key: event.id,
-          title: source ? `Document added: ${sourceAttribution(source)}` : "A document was added",
+          title: source ? `Paperwork added: ${sourceAttribution(source)}` : "New paperwork",
           detail: source
             ? `${actor} · received ${formatDate(source.observedAt)}`
-            : `${actor} added a document to the plan.`,
+            : `${actor} added paperwork to the plan.`,
         };
       }
       case "evidence.reviewed": {
         const source = findSource(String(event.payload.evidenceId ?? ""));
         const disposition = String(event.payload.disposition ?? "");
-        const name = source ? sourceAttribution(source) : "a document";
+        const name = source ? sourceAttribution(source) : "some paperwork";
         return {
           key: event.id,
           title:
             disposition === "accepted"
-              ? `Document reviewed and current: ${name}`
+              ? `Paperwork reviewed and current: ${name}`
               : disposition === "rejected"
-                ? `Document marked not used or needing a new version: ${name}`
-                : `Document returned for review: ${name}`,
+                ? `Paperwork marked for a new version: ${name}`
+                : `Paperwork sent back for a look: ${name}`,
           detail:
             disposition === "accepted"
-              ? `${actor} reviewed it as current. No partner confirmation is implied.`
-              : `${actor} · no message was sent.`,
+              ? `${actor} reviewed it as current.`
+              : `${actor} marked it for a new version.`,
         };
       }
       case "change.adopted": {
         const id = String(event.payload.changeId ?? "");
         return {
           key: event.id,
-          title: changeTitle(id),
+          title: typeof event.payload.title === "string" ? event.payload.title : changeTitle(id),
           detail: `${actor} · some checklist items may need an update; the rest stayed valid.`,
         };
       }
@@ -79,7 +79,7 @@ export function activityEntries(store: Store): ActivityEntry[] {
       case "requirementSet.changed":
         return {
           key: event.id,
-          title: "The scope of the plan changed",
+          title: "The plan’s scope changed",
           detail: `${actor} · the previous sign-off no longer applies.`,
         };
       default:

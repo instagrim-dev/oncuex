@@ -51,7 +51,7 @@ export function SignOffDialog({
   const signOff = () => {
     session.apply("Plan signed off", (current) => {
       recordAcceptance(current, nextDecisionId(current));
-      return "The plan is signed off. The details are in Activity.";
+      return "The plan is signed off. The details are in the Timeline.";
     });
     onOpenChange(false);
   };
@@ -71,21 +71,21 @@ export function SignOffDialog({
             {!briefReady
               ? "Review the client brief and open the plan first. Sign off will stay available here."
               : latestCurrent
-                ? "The sign-off is recorded in Activity and still applies to this plan."
-                : "A sign-off says the event lead is ready to stand behind this plan with the client."}
+                ? "The sign-off is recorded in the Timeline and still applies to this plan."
+                : "Signing off means you’re ready to stand behind this plan with the client."}
           </DialogDescription>
         </DialogHeader>
 
         {latest && !latestCurrent && (
           <Note tone="warning" icon={ShieldCheck}>
-            Earlier sign-off saved; this version needs review.
+            The last sign-off is saved, but this version needs another look.
           </Note>
         )}
 
         {!briefReady ? (
           <Note tone="neutral">
-            There is no adopted brief yet. Start with the client brief in Overview, then come back
-            to sign off.
+            There’s no brief yet. Start with the client brief in Overview, then come back to sign
+            off.
           </Note>
         ) : !assessment ? (
           <p className="text-[12.5px] leading-5 text-muted-foreground">
@@ -115,8 +115,7 @@ export function SignOffDialog({
         ) : ready ? (
           <div className="space-y-3">
             <Note tone="neutral" icon={ShieldCheck}>
-              Required checks pass; not yet signed off. Sign off this plan when you are ready to
-              share it with the client.
+              Required supporting checks pass. Open questions remain visible below; they do not block sign-off under the current rules. The plan is not signed off yet.
             </Note>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {WORK_AREAS.map((area) => (
@@ -145,7 +144,7 @@ export function SignOffDialog({
             )}
             <div className="text-[11px] text-muted-foreground">
               {brief.project} · {formatDate(brief.eventDate)} · {snapshot.location.venueName}
-              {latest && " · earlier sign-off saved; this version needs review. Signing replaces it, and the earlier sign-off stays in Activity."}
+              {latest && " · the last sign-off is saved, but this version needs another look. Signing replaces it, and the old one stays in the Timeline."}
             </div>
           </div>
         ) : (
