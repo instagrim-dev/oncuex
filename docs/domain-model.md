@@ -15,7 +15,10 @@ A decision is **current** if and only if all hold:
 
 1. Its `targetAssessmentRevision` equals the current `assessmentRevision`.
 2. Its `requirementSetVersion` equals the current `requirementSetVersion`.
-3. Every evidence record in its `evidenceSetDigest` is still `accepted` and unexpired.
+3. Every evidence record in its `evidenceSetDigest` is still `accepted`.
+4. None of those evidence records has passed `expiresAt`.
+
+Condition 4 makes expiry visible to currentness, not only to readiness. A decision whose supporting evidence has since expired reads as `historical` even when nothing else changed.
 
 Recording a decision increments `eventSequence` and leaves `assessmentRevision` unchanged, so an immediate read returns it as current. A reload reconstructs both counters from the event log and returns the same decision.
 
@@ -221,18 +224,36 @@ Milestone output. `integrated` and `readiness` are separate fields and do not co
 | Scope changes | New `requirementSetVersion`; a new decision is required; the prior decision remains history |
 | A value reverts to an earlier one | Lineage advanced; the prior decision is not current; no automatic restoration |
 | A decision is read at a later `assessmentRevision` | Returns `historical` plus named current residuals |
+| Evidence supporting a decision expires | The decision returns `historical` even though no field changed |
 | An unrelated field changes | Unaffected evidence stays `supported`; only the declared dependent set moves |
 | A decision is recorded | `eventSequence` increments; `assessmentRevision` does not; the decision reads as current |
 
 ## Write semantics
 
+A command is validated before any state is touched. A rejected write leaves the record byte-identical to the record that preceded it: no field moves, no event is appended, and neither counter advances.
+
 1. Every write carries `commandId` and `expectedAssessmentRevision`.
-2. A mismatch rejects with `conflict`; authoritative state is unchanged and the caller is told to reload.
-3. A repeated `commandId` returns the stored result and appends nothing.
-4. Validation order: schema, role, action identity, expected revision, domain rules.
-5. A failed action appends no event and changes neither counter.
-6. Only `project_manager` records a decision. A `contributor` attempt is rejected with `role_denied`.
-7. Exceptions are additive records with reason, owner and affected requirement IDs.
+2. A command whose `commandId` has already succeeded returns the stored result and appends nothing. Replay is checked before every other rule, so a retried acceptance is idempotent rather than a duplicate.
+3. A revision mismatch rejects with `conflict`.
+4. Validation order: event type, replay, role, duplicate identity, expected revision, field paths, types, domain rules.
+5. A **change** may write only paths declared in the typed schema. An undeclared path rejects with `undeclared_path`; it cannot create a field.
+6. A change may not write a counter or an identity. `assessmentRevision` rejects with `immutable_path`, because rewriting it would corrupt the binding every decision depends on.
+7. Only `project_manager` records a decision. A `contributor` attempt is rejected with `role_denied`.
+8. Exceptions are additive records with reason, owner and affected requirement IDs.
+
+### Rejection codes
+
+| Code | Cause |
+| --- | --- |
+| `conflict` | `expectedAssessmentRevision` does not match current |
+| `role_denied` | Actor does not hold the required role |
+| `duplicate_evidence` | Evidence ID already attached |
+| `duplicate_decision` | Decision ID already recorded under a different command |
+| `undeclared_path` | Change path is not in the typed schema |
+| `immutable_path` | Change path is a counter or identity |
+| `bad_path` | Intermediate container does not exist |
+| `type_mismatch` | Bound evidence value does not match the declared type |
+| `not_eligible` | Readiness or integrated checks do not permit a decision |
 
 ## Impact computation
 
@@ -247,6 +268,7 @@ There is no blanket reset. In the reference scenario the photographer requiremen
 | Kept separate | Consequence of merging |
 | --- | --- |
 | Event sequence vs assessment revision | A decision stales itself on write |
+| Validated write vs applied write | A refused command leaves a half-written record |
 | Generation vs adoption | A suggestion becomes an authoritative fact |
 | Readiness vs acceptance | A computed status impersonates a human decision |
 | Evidence existence vs evidence truth | A digest is presented as verified reality |

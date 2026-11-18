@@ -57,6 +57,12 @@ def digest(obj: Any) -> str:
     return "sha256:" + hashlib.sha256(canon(obj).encode()).hexdigest()
 
 
+def is_expired(evidence: dict, now: str) -> bool:
+    """An evidence record is stale once its expiry has passed."""
+    expires = evidence.get("expiresAt")
+    return bool(expires) and expires <= now
+
+
 def resolve(doc: dict, path: str):
     cur: Any = doc
     for part in path.split("."):
@@ -197,7 +203,7 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
         current: list[dict] = []
         stale: list[dict] = []
         for ev in admissible:
-            if ev.get("expiresAt") and ev["expiresAt"] <= now:
+            if is_expired(ev, now):
                 stale.append({"code": "evidence_expired", "evidenceId": ev["id"]})
                 continue
             changed = next(

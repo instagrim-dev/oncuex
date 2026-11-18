@@ -192,6 +192,7 @@ def main() -> int:
 
     sequence_before = store.sequence
     revision_before = store.assessment_revision
+    record_before = json.dumps(store.export(), sort_keys=True)
     try:
         store.adopt_change(
             {"commandId": "CMD-50", "role": "project_manager",
@@ -203,6 +204,11 @@ def main() -> int:
         check("stale write is rejected", exc.code == "conflict", exc.code)
     check("failed write changed no counter",
           (store.sequence, store.assessment_revision) == (sequence_before, revision_before))
+    check("failed write left the record byte-identical",
+          json.dumps(store.export(), sort_keys=True) == record_before)
+    check("failed write did not move the venue capacity",
+          store.snapshot()["location"]["capacity"] == 140,
+          str(store.snapshot()["location"]["capacity"]))
 
     print("\n8. Export")
     export = store.export()

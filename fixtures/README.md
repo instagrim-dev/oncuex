@@ -73,6 +73,7 @@ The scenario ships with a validator that enforces the contract mechanically:
 - Every budget amount is stated by at least one source, and each state's total equals the sum of its line items.
 - Each oracle case is checked against the requirements derived from the scenario, not against the oracle's own claims: the O2 failing-check set must equal all six checks, and the O6 impacted set must equal the dependency closure of `REQ-venue-loading-1`.
 - Every requirement that O4 marks `supported` has accepted recovery evidence whose bound values equal the recovered state's values.
+- The engine's typed path table does not drift from `fieldSchema`.
 - `decision.recorded` events never advance `assessmentRevision`, and decision cases never report a decision as historical at the revision it targeted.
 
 ## Files
@@ -81,4 +82,5 @@ The scenario ships with a validator that enforces the contract mechanically:
 | --- | --- |
 | [scenario.json](scenario.json) | Typed field schema, project, requirements, sources, evidence records and the three states. |
 | [expected-impact.json](expected-impact.json) | Revision model, event timeline, expected outcomes O1–O11, and the invariants they imply. |
-| [acceptance-cases.json](acceptance-cases.json) | V1–V21 with actions and expected observables. |
+| [acceptance-cases.json](acceptance-cases.json) | V1–V23 with actions and expected observables. |
+| [../tools/validate_fixtures.py](../tools/validate_fixtures.py) | Mechanical enforcement of every rule on this page. |

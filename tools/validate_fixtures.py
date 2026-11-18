@@ -132,6 +132,23 @@ def check_schema(scn) -> dict:
     return schema
 
 
+def check_engine_schema(schema: dict) -> None:
+    """The engine's typed path table must not drift from the fixture schema."""
+    sys.path.insert(0, ROOT)
+    try:
+        from oncuex.engine import TYPED_PATHS
+    except Exception as exc:
+        err(f"engine schema not importable: {exc}")
+        return
+
+    missing = sorted(set(schema) - set(TYPED_PATHS))
+    extra = sorted(set(TYPED_PATHS) - set(schema))
+    if missing:
+        err(f"engine schema missing paths: {missing}")
+    if extra:
+        err(f"engine schema declares paths absent from fieldSchema: {extra}")
+
+
 def check_bindings(scn, schema) -> dict:
     req_ids = {r["id"] for r in scn["requirements"]}
     for req in scn["requirements"]:
@@ -331,6 +348,7 @@ def check_cases(cases) -> None:
 def main() -> int:
     scenario, oracle, cases = load()
     schema = check_schema(scenario)
+    check_engine_schema(schema)
     graph = check_bindings(scenario, schema)
     evidence = check_evidence(scenario, schema)
     check_amounts(scenario)

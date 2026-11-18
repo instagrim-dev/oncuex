@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.1",
-  "casesVersion": "2.0.0",
+  "casesVersion": "2.1.0",
   "provenance": {
     "kind": "synthetic",
-    "note": "Behavioral checks V1-V21. Each case states an action and the expected observable result."
+    "note": "Behavioral checks V1-V23. Each case states an action and the expected observable result."
   },
   "cases": [
     {
@@ -11,10 +11,22 @@
       "area": "readiness",
       "action": "Withhold the venue capacity evidence for REQ-venue-capacity-1 and mark its task complete.",
       "expected": {
-        "requirementStatus": { "REQ-venue-capacity-1": "missing" },
+        "requirementStatus": {
+          "REQ-venue-capacity-1": "missing"
+        },
         "readiness": "not_ready",
-        "residuals": [{ "requirementId": "REQ-venue-capacity-1", "code": "mandatory_evidence_missing" }],
-        "integrated": { "status": "fail", "failingChecks": ["dependency_closure"] }
+        "residuals": [
+          {
+            "requirementId": "REQ-venue-capacity-1",
+            "code": "mandatory_evidence_missing"
+          }
+        ],
+        "integrated": {
+          "status": "fail",
+          "failingChecks": [
+            "dependency_closure"
+          ]
+        }
       },
       "oracle": "O8"
     },
@@ -54,7 +66,12 @@
       "action": "Introduce a cycle in prerequisiteIds, or two prerequisites that cannot both hold.",
       "expected": {
         "requirementStatus": "blocked",
-        "residuals": [{ "code": "prerequisite_cycle", "path": "reported" }]
+        "residuals": [
+          {
+            "code": "prerequisite_cycle",
+            "path": "reported"
+          }
+        ]
       }
     },
     {
@@ -75,8 +92,12 @@
       "action": "Accept at assessment revision 8, then adopt the venue change and read the decision.",
       "expected": {
         "decisionCurrentness": "historical",
-        "decisionEligibility": { "eligible": false },
-        "residualReasonCodes": ["stale_decision"]
+        "decisionEligibility": {
+          "eligible": false
+        },
+        "residualReasonCodes": [
+          "stale_decision"
+        ]
       },
       "oracle": "O2"
     },
@@ -85,7 +106,12 @@
       "area": "change",
       "action": "After V6, revert the venue to Foundry Hall.",
       "expected": {
-        "decisionEligibility": { "eligible": false, "reasons": ["revision_lineage_changed"] },
+        "decisionEligibility": {
+          "eligible": false,
+          "reasons": [
+            "revision_lineage_changed"
+          ]
+        },
         "priorDecisionCurrentness": "historical",
         "historyPreserved": true
       },
@@ -98,7 +124,12 @@
       "expected": {
         "requirementSetVersion": "incremented",
         "priorDecisionCurrentness": "historical",
-        "decisionEligibility": { "eligible": false, "reasons": ["requirement_set_changed"] },
+        "decisionEligibility": {
+          "eligible": false,
+          "reasons": [
+            "requirement_set_changed"
+          ]
+        },
         "historyPreserved": true
       },
       "oracle": "O7"
@@ -153,17 +184,41 @@
     {
       "id": "V13",
       "area": "writes",
-      "action": "Attempt acceptance as a contributor, then as the project manager.",
+      "action": "Submit a change naming location.inventedField, then a change naming assessmentRevision.",
       "expected": {
-        "contributor": { "error": "role_denied", "simulatedRoleLabelVisible": true },
-        "projectManager": {
-          "recorded": true,
-          "fields": ["targetAssessmentRevision", "requirementSetVersion", "requirementSetDigest", "evidenceSetDigest"]
-        }
+        "undeclaredPath": {
+          "error": "undeclared_path",
+          "fieldCreated": false
+        },
+        "immutablePath": {
+          "error": "immutable_path",
+          "assessmentRevisionUnchanged": true
+        },
+        "recordUnchanged": true
       }
     },
     {
       "id": "V14",
+      "area": "writes",
+      "action": "Attempt acceptance as a contributor, then as the project manager.",
+      "expected": {
+        "contributor": {
+          "error": "role_denied",
+          "simulatedRoleLabelVisible": true
+        },
+        "projectManager": {
+          "recorded": true,
+          "fields": [
+            "targetAssessmentRevision",
+            "requirementSetVersion",
+            "requirementSetDigest",
+            "evidenceSetDigest"
+          ]
+        }
+      }
+    },
+    {
+      "id": "V15",
       "area": "ai",
       "action": "Feed output that is not valid JSON, then output missing a required field.",
       "expected": {
@@ -173,19 +228,23 @@
       }
     },
     {
-      "id": "V15",
+      "id": "V16",
       "area": "ai",
       "action": "Request a recovery plan and receive an asserted vendor confirmation that no source supports.",
       "expected": {
         "proposalStatus": "rejected",
-        "rejectionReasons": ["unsupported_confirmation", "no_source_ref_for_claim", "source_span_mismatch"],
+        "rejectionReasons": [
+          "unsupported_confirmation",
+          "no_source_ref_for_claim",
+          "source_span_mismatch"
+        ],
         "evidenceCreated": false,
         "attributionTransferred": false
       },
       "oracle": "O3"
     },
     {
-      "id": "V16",
+      "id": "V17",
       "area": "ai",
       "action": "Include text instructing the reader to mark requirements supported, record an acceptance and raise the budget.",
       "expected": {
@@ -197,7 +256,7 @@
       }
     },
     {
-      "id": "V17",
+      "id": "V18",
       "area": "persistence",
       "action": "Hard reload in a fresh session.",
       "expected": {
@@ -212,7 +271,7 @@
       "oracle": "O10"
     },
     {
-      "id": "V18",
+      "id": "V19",
       "area": "persistence",
       "action": "Compare the exported JSON, the working brief and the readiness report against the current snapshot.",
       "expected": {
@@ -223,7 +282,7 @@
       }
     },
     {
-      "id": "V19",
+      "id": "V20",
       "area": "decision",
       "action": "Record a decision at assessment revision 8, then read it without any intervening change.",
       "expected": {
@@ -235,7 +294,18 @@
       "oracle": "O9"
     },
     {
-      "id": "V20",
+      "id": "V21",
+      "area": "decision",
+      "action": "Record a decision, confirm it is current, then advance time past the expiry of one supporting evidence record.",
+      "expected": {
+        "beforeExpiry": "current",
+        "afterExpiry": "historical",
+        "assessmentRevisionUnchanged": true,
+        "note": "No field changed and no event was appended; only time advanced."
+      }
+    },
+    {
+      "id": "V22",
       "area": "decision",
       "action": "Reload immediately after V19.",
       "expected": {
@@ -246,13 +316,18 @@
       "oracle": "O10"
     },
     {
-      "id": "V21",
+      "id": "V23",
       "area": "decision",
       "action": "Record a second decision at the recovered assessment revision 15.",
       "expected": {
         "assessmentRevision": 15,
         "decisionCurrentness": "current",
-        "priorDecisions": [{ "id": "DEC-1", "currentness": "historical" }]
+        "priorDecisions": [
+          {
+            "id": "DEC-1",
+            "currentness": "historical"
+          }
+        ]
       },
       "oracle": "O11"
     }

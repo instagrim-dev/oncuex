@@ -7,6 +7,9 @@ Two counters, deliberately independent:
 
 Recording a decision advances the first and not the second, so a decision is
 current the instant it is written.
+
+A command is validated before any state is touched, so a rejected write leaves
+the record byte-identical to the record that preceded it.
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from .engine import digest, evaluate
+from .engine import TYPED_PATHS, digest, evaluate, is_expired, value_matches
 
 
 class CommandError(Exception):
@@ -34,6 +37,10 @@ ASSESSED_EVENTS = {
 
 # events that advance the sequence only
 OPINION_EVENTS = {"decision.recorded"}
+
+# Fields a change command may never write. assessmentRevision is owned by the
+# event log, and rewriting it would corrupt the binding every decision depends on.
+IMMUTABLE_PATHS = {"assessmentRevision"}
 
 
 class Store:
@@ -61,7 +68,8 @@ class Store:
     def latest_decision(self) -> dict | None:
         if not self._decisions:
             return None
-        return self._decisions[sorted(self._decisions)[-1]]
+        # Insertion order, not identifier order: DEC-10 follows DEC-2.
+        return list(self._decisions.values())[-1]
 
     def currentness(self, decision_id: str) -> str:
         decision = self._decisions.get(decision_id)
@@ -71,18 +79,23 @@ class Store:
             return "historical"
         if decision["requirementSetVersion"] != self.project.get("requirementSetVersion", 1):
             return "historical"
+        now = self.project.get("_now", "1970-01-01T00:00:00Z")
         for ev_id in decision["_evidenceIds"]:
             ev = next((e for e in self.evidence if e["id"] == ev_id), None)
             if ev is None or ev.get("reviewDisposition") != "accepted":
                 return "historical"
+            if is_expired(ev, now):
+                return "historical"
         return "current"
 
     # ---------------------------------------------------------------- writes
-    def _append(self, command: dict, event_type: str, payload: dict) -> dict:
-        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
-            raise CommandError("unknown_event", event_type)
-
+    def _replay(self, command: dict) -> dict | None:
         command_id = command.get("commandId")
+        if command_id is None:
+            return None
+        return self._results.get(command_id)
+
+    def _check_revision(self, command: dict) -> None:
         expected = command.get("expectedAssessmentRevision")
         if expected is not None and expected != self.assessment_revision:
             raise CommandError(
@@ -90,8 +103,20 @@ class Store:
                 f"expected assessment revision {expected}, current {self.assessment_revision}",
             )
 
-        if self._results.get(command_id):
-            return self._results[command_id]
+    def _begin(self, command: dict, event_type: str) -> dict | None:
+        """Replay or validate a command before any state is touched."""
+        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
+            raise CommandError("unknown_event", event_type)
+        replay = self._replay(command)
+        if replay is not None:
+            return replay
+        self._check_revision(command)
+        return None
+
+    def _commit(self, command: dict, event_type: str, payload: dict) -> dict:
+        """Append the event and advance both counters. Cannot reject."""
+        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
+            raise CommandError("unknown_event", event_type)
 
         assessed = event_type in ASSESSED_EVENTS
         if assessed:
@@ -101,10 +126,10 @@ class Store:
         event = {
             "id": f"EVT-{self.sequence}",
             "sequence": self.sequence,
-            "commandId": command_id,
+            "commandId": command.get("commandId"),
             "eventType": event_type,
             "actor": command.get("actor"),
-            "expectedAssessmentRevision": expected,
+            "expectedAssessmentRevision": command.get("expectedAssessmentRevision"),
             "resultingAssessmentRevision": self.assessment_revision,
             "payload": payload,
         }
@@ -114,47 +139,61 @@ class Store:
             "assessmentRevision": self.assessment_revision,
             "assessedFactsChanged": assessed,
         }
-        self._results[command_id] = result
+        command_id = command.get("commandId")
+        if command_id is not None:
+            self._results[command_id] = result
         return result
 
     def adopt_brief(self, command: dict, brief: dict) -> dict:
         if command.get("role") != "project_manager":
             raise CommandError("role_denied")
+        replay = self._begin(command, "brief.adopted")
+        if replay is not None:
+            return replay
         self.project["brief"] = copy.deepcopy(brief)
-        return self._append(command, "brief.adopted", {"brief": brief})
+        return self._commit(command, "brief.adopted", {"brief": brief})
 
     def attach_evidence(self, command: dict, evidence: dict) -> dict:
+        replay = self._begin(command, "evidence.attached")
+        if replay is not None:
+            return replay
         if any(e["id"] == evidence["id"] for e in self.evidence):
             raise CommandError("duplicate_evidence", evidence["id"])
         for path, value in evidence["boundFieldVersions"].items():
-            from .engine import TYPED_PATHS, value_matches
-
             spec = TYPED_PATHS.get(path)
             if spec is None:
                 raise CommandError("undeclared_path", path)
             if spec["type"] != "collection" and not value_matches(path, value):
                 raise CommandError("type_mismatch", f"{path}={value!r}")
         self.evidence.append(copy.deepcopy(evidence))
-        return self._append(command, "evidence.attached", {"evidenceId": evidence["id"]})
+        return self._commit(command, "evidence.attached", {"evidenceId": evidence["id"]})
 
     def adopt_change(self, command: dict, change: dict) -> dict:
         """Apply field changes, bumping the assessed revision exactly once."""
         if command.get("role") != "project_manager":
             raise CommandError("role_denied")
-        for path, delta in change["changedFields"].items():
+        replay = self._begin(command, "change.adopted")
+        if replay is not None:
+            return replay
+        fields = change["changedFields"]
+        for path in fields:
+            self._check_path(path)
+        for path, delta in fields.items():
             self._set_path(path, delta["to"])
-        return self._append(command, "change.adopted", {"changeId": change["id"]})
+        return self._commit(command, "change.adopted", {"changeId": change["id"]})
 
     def record_decision(self, command: dict) -> dict:
         # A repeated command returns the stored result before any other validation,
         # so a retried acceptance is idempotent rather than a duplicate.
-        if self._results.get(command.get("commandId")):
-            return self._results[command["commandId"]]
+        replay = self._replay(command)
+        if replay is not None:
+            return replay
         if command.get("role") != "project_manager":
             raise CommandError("role_denied")
         decision_id = command["decisionId"]
         if decision_id in self._decisions:
             raise CommandError("duplicate_decision", decision_id)
+        self._check_revision(command)
 
         assessment = self.assess()
         if assessment["readiness"] != "ready_for_review":
@@ -177,12 +216,29 @@ class Store:
             "disposition": "accepted",
             "_evidenceIds": evidence_ids,
         }
+        result = self._commit(command, "decision.recorded", {"decisionId": decision_id})
         self._decisions[decision_id] = decision
-        result = self._append(command, "decision.recorded", {"decisionId": decision_id})
         result["decisionId"] = decision_id
         return result
 
     # ---------------------------------------------------------------- helpers
+    def _check_path(self, path: str) -> None:
+        """Reject any field path a change may not write.
+
+        Two conditions. The path must be declared in the typed schema, so a
+        change cannot invent a field; and it must not be a counter or an identity,
+        so a change cannot rewrite what governs currentness or attribution.
+        """
+        if path not in TYPED_PATHS:
+            raise CommandError("undeclared_path", path)
+        if path in IMMUTABLE_PATHS:
+            raise CommandError("immutable_path", path)
+        cursor: Any = self.project
+        for part in path.split(".")[:-1]:
+            if not isinstance(cursor, dict) or not isinstance(cursor.get(part), dict):
+                raise CommandError("bad_path", path)
+            cursor = cursor[part]
+
     def _set_path(self, path: str, value: Any) -> None:
         parts = path.split(".")
         cursor = self.project

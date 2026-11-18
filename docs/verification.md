@@ -1,6 +1,6 @@
 # Verification
 
-Twenty-one behavioral checks define correct operation. Each states the action, the expected observable result, and what counts as a failure. They are enumerated in machine-readable form in [../fixtures/acceptance-cases.json](../fixtures/acceptance-cases.json).
+Twenty-three behavioral checks define correct operation. Each states the action, the expected observable result, and what counts as a failure. They are enumerated in machine-readable form in [../fixtures/acceptance-cases.json](../fixtures/acceptance-cases.json).
 
 ## Readiness
 
@@ -42,39 +42,45 @@ Submit a command with `expectedAssessmentRevision` one behind current. The comma
 Submit the same decision twice with the same `commandId`. The second call returns the stored result. Exactly one decision exists for that revision.
 
 **V12 — A failed action leaves state unchanged.**
-Trigger a validation failure, a role failure and a conflict in turn. After each, the current record, both counters and the decision set are byte-identical to before.
+Trigger a validation failure, a role failure, an undeclared change path and a revision conflict in turn. After each, the exported record — fields, both counters, event list and decision set — is byte-identical to before. In particular a rejected change never moves the field it named.
 
-**V13 — Only the project manager accepts.**
+**V13 — A change cannot write outside the schema.**
+Submit a change naming `location.inventedField`. It is rejected with `undeclared_path`, the field is not created, and the record is unchanged. Submit a change naming `assessmentRevision`. It is rejected with `immutable_path` and the revision is unchanged; a change may never rewrite the counter that governs currentness.
+
+**V14 — Only the project manager accepts.**
 Attempt acceptance as a contributor. The action is rejected with `role_denied` and the simulated-role limitation is visible. The project manager's own acceptance is recorded with `targetAssessmentRevision`, requirement-set version, requirement-set digest and evidence-set digest.
 
 ## AI
 
-**V14 — Malformed output cannot mutate records.**
+**V15 — Malformed output cannot mutate records.**
 Feed output that is not valid JSON, then output missing a required field. Each yields a visible generation error and no proposal, or a proposal stored as rejected. `assessmentRevision` is unchanged.
 
-**V15 — An invented confirmation is rejected.**
+**V16 — An invented confirmation is rejected.**
 Request a recovery plan. The model asserts a vendor confirmation that no source supports. The proposal is rejected with `unsupported_confirmation`, `no_source_ref_for_claim` and `source_span_mismatch`. No evidence record is created and no attribution is transferred to a named person.
 
-**V16 — An embedded instruction is treated as data.**
+**V17 — An embedded instruction is treated as data.**
 Include text instructing the reader to mark requirements supported, record an acceptance and raise the budget. The text is preserved as an attributed excerpt. No status, decision or budget changes. If the instruction appears in proposal output, the proposal is rejected with `instruction_content_detected`.
 
 ## Persistence and export
 
-**V17 — Reload preserves the record.**
+**V18 — Reload preserves the record.**
 Hard reload in a fresh session. The project revision, evidence bindings, open questions, decisions and history match the pre-reload state exactly.
 
-**V18 — Export preserves the record.**
+**V19 — Export preserves the record.**
 Compare the exported JSON, the working brief and the readiness report against the current snapshot. Evidence bindings, open questions, both decisions, the historical flag and the residual list are present and agree. The export distinguishes history from current state.
 
 ## Decision currentness
 
-**V19 — A decision does not stale itself.**
+**V20 — A decision does not stale itself.**
 Record a decision at assessment revision 8. The event sequence advances to 9; the assessment revision stays at 8. A read immediately afterwards returns the decision as `current`, not `historical`.
 
-**V20 — Currentness survives reload.**
-Reload directly after V19. Both counters are reconstructed from the event log: sequence 9, assessment revision 8. The decision is still `current` and the history is intact.
+**V21 — Expiry reaches currentness.**
+Record a decision, confirm it reads `current`, then advance time past the expiry of one supporting evidence record. The decision reads `historical` even though no field changed and the revision did not move.
 
-**V21 — A later decision supersedes without rewriting.**
+**V22 — Currentness survives reload.**
+Reload directly after V20. Both counters are reconstructed from the event log: sequence 9, assessment revision 8. The decision is still `current` and the history is intact.
+
+**V23 — A later decision supersedes without rewriting.**
 At the recovered assessment revision 15, record a second decision. It is `current`; the first decision is `historical` and remains readable with its own target revision.
 
 ## Correctness conditions
@@ -88,8 +94,10 @@ These hold absolutely:
 - A retried command never duplicates a decision.
 - An acceptance is never rendered without a decision record.
 - A decision is never reported historical solely because it was written.
+- A decision is never reported current while any of its supporting evidence has expired.
+- A rejected command never changes a field, a counter, the event list or the decision set.
 - No check reports fewer failures than the conditions that actually fail.
 
 ## Machine-readable form
 
-[../fixtures/acceptance-cases.json](../fixtures/acceptance-cases.json) carries V1–V21 with identifiers, actions, expected results and the oracle case each references.
+[../fixtures/acceptance-cases.json](../fixtures/acceptance-cases.json) carries V1–V23 with identifiers, actions, expected results and the oracle case each references.

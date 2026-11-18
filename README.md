@@ -48,7 +48,7 @@ All people, venues, vendors and prices are fictional. No customer data, contract
 | [docs/domain-model.md](docs/domain-model.md) | Records, identifiers, state transitions, currentness and write semantics. |
 | [docs/readiness-rules.md](docs/readiness-rules.md) | Requirement predicates, integrated checks and impact computation. |
 | [docs/ai-boundary.md](docs/ai-boundary.md) | Extraction and drafting contract, validation and rejection reasons. |
-| [docs/verification.md](docs/verification.md) | The twenty-one behavioral checks the implementation must satisfy. |
+| [docs/verification.md](docs/verification.md) | The twenty-three behavioral checks the implementation must satisfy. |
 | [fixtures/scenario.json](fixtures/scenario.json) | Typed field schema, project, requirements, sources, evidence and the three states. |
 | [fixtures/expected-impact.json](fixtures/expected-impact.json) | Revision model, event timeline, expected outcomes and the invariants they imply. |
 | [fixtures/acceptance-cases.json](fixtures/acceptance-cases.json) | The verification checks in machine-readable form. |
@@ -60,11 +60,11 @@ All people, venues, vendors and prices are fictional. No customer data, contract
 
 ```sh
 python3 tools/validate_fixtures.py   # schema, bindings, evidence, oracle coherence
-python3 tools/check_oracle.py        # 26 differential checks against the oracle
+python3 tools/check_oracle.py        # 40 differential checks against the oracle
 python3 tools/reference_path.py      # baseline -> change -> recovery -> acceptance -> reload
 ```
 
-`tools/reference_path.py` exercises the end-to-end path and asserts that a decision stays current through an immediate readback and a reload, that the venue change reopens exactly six requirements while the photographer deliverable stays supported, and that a retried command appends nothing.
+`tools/reference_path.py` exercises the end-to-end path and asserts that a decision stays current through an immediate readback and a reload, that the venue change reopens exactly six requirements while the photographer deliverable stays supported, that a retried command appends nothing, and that a rejected write leaves the exported record byte-identical.
 | [tools/validate_fixtures.py](tools/validate_fixtures.py) | Mechanical enforcement of the schema, binding, evidence and oracle rules. |
 
 ## License

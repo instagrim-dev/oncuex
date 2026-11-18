@@ -232,6 +232,116 @@ def main() -> int:
     check("regression: replay appends nothing", replay.sequence == seq_after_first,
           f"{seq_after_first} -> {replay.sequence}")
 
+    # ------------------------------------------------------------ honesty regressions
+    # A rejected command must not mutate the record it refused to write.
+    frozen = Store(
+        project_for(scenario, "baseline", 8),
+        scenario["requirements"],
+        evidence_for(scenario, all_base),
+    )
+    frozen_record = json.dumps(frozen.export(), sort_keys=True)
+    stale_attempts = (
+        ("change", lambda: frozen.adopt_change(
+            {"commandId": "CMD-S1", "role": "project_manager",
+             "expectedAssessmentRevision": 7},
+            {"id": "CHG-S1", "changedFields": {"location.capacity": {"from": 150, "to": 999}}})),
+        ("evidence", lambda: frozen.attach_evidence(
+            {"commandId": "CMD-S2", "role": "project_manager",
+             "expectedAssessmentRevision": 7},
+            scenario["evidence"][7])),
+        ("brief", lambda: frozen.adopt_brief(
+            {"commandId": "CMD-S3", "role": "project_manager",
+             "expectedAssessmentRevision": 7},
+            {**scenario["scenario"]["brief"], "client": "MUTATED"})),
+    )
+    for label, attempt in stale_attempts:
+        try:
+            attempt()
+            check(f"regression: stale {label} rejected", False, "no error")
+        except CommandError as exc:
+            check(f"regression: stale {label} rejected", exc.code == "conflict", exc.code)
+    check("regression: rejected commands leave the record byte-identical",
+          json.dumps(frozen.export(), sort_keys=True) == frozen_record)
+    check("regression: rejected change did not move the venue capacity",
+          frozen.snapshot()["location"]["capacity"] == 150,
+          str(frozen.snapshot()["location"]["capacity"]))
+
+    # expiry must be visible to decision currentness, not only to readiness
+    expiring_decision = Store(
+        project_for(scenario, "baseline", 8),
+        scenario["requirements"],
+        evidence_for(scenario, all_base),
+    )
+    expiring_decision.record_decision({
+        "commandId": "CMD-E", "actor": "PM-rowan", "role": "project_manager",
+        "decisionId": "DEC-E", "expectedAssessmentRevision": 8,
+    })
+    check("regression: decision reads current before expiry",
+          expiring_decision.currentness("DEC-E") == "current")
+    expiring_decision.project["_now"] = "2027-03-08T00:00:00Z"
+    check("regression: expired evidence cannot leave a decision current",
+          expiring_decision.currentness("DEC-E") == "historical",
+          expiring_decision.currentness("DEC-E"))
+
+    # the latest decision is the last recorded, not the highest identifier
+    ordered = Store(
+        project_for(scenario, "baseline", 8),
+        scenario["requirements"],
+        evidence_for(scenario, all_base),
+    )
+    for decision_id in ("DEC-1", "DEC-2", "DEC-10"):
+        ordered.record_decision({
+            "commandId": f"CMD-{decision_id}", "actor": "PM-rowan",
+            "role": "project_manager", "decisionId": decision_id,
+            "expectedAssessmentRevision": 8,
+        })
+    check("regression: latest decision is the last recorded, not the highest id",
+          ordered.latest_decision()["id"] == "DEC-10",
+          ordered.latest_decision()["id"])
+
+    # a change may not invent a field in the schema
+    phantom = Store(
+        project_for(scenario, "baseline", 8),
+        scenario["requirements"],
+        evidence_for(scenario, all_base),
+    )
+    phantom_before = json.dumps(phantom.export(), sort_keys=True)
+    try:
+        phantom.adopt_change(
+            {"commandId": "CMD-PH", "role": "project_manager",
+             "expectedAssessmentRevision": 8},
+            {"id": "CHG-PH",
+             "changedFields": {"location.inventedField": {"from": None, "to": "x"}}})
+        check("regression: undeclared change path rejected", False, "no error")
+    except CommandError as exc:
+        check("regression: undeclared change path rejected",
+              exc.code == "undeclared_path", exc.code)
+    check("regression: rejected phantom path left the record byte-identical",
+          json.dumps(phantom.export(), sort_keys=True) == phantom_before)
+    check("regression: rejected phantom path created no field",
+          phantom_before == json.dumps(phantom.export(), sort_keys=True))
+
+    # a change may not rewrite the counter that governs currentness
+    forged = Store(
+        project_for(scenario, "baseline", 8),
+        scenario["requirements"],
+        evidence_for(scenario, all_base),
+    )
+    forged_before = json.dumps(forged.export(), sort_keys=True)
+    try:
+        forged.adopt_change(
+            {"commandId": "CMD-FG", "role": "project_manager",
+             "expectedAssessmentRevision": 8},
+            {"id": "CHG-FG", "changedFields": {"assessmentRevision": {"from": 8, "to": 1}}})
+        check("regression: counter rewrite rejected", False, "no error")
+    except CommandError as exc:
+        check("regression: counter rewrite rejected",
+              exc.code == "immutable_path", exc.code)
+    check("regression: rejected counter rewrite left the revision at 8",
+          forged.assessment_revision == 8, str(forged.assessment_revision))
+    check("regression: rejected counter rewrite appended no event",
+          json.dumps(forged.export(), sort_keys=True) == forged_before)
+
     print(f"{checks - len(failures)}/{checks} checks passed")
     for failure in failures:
         print(f"  FAIL {failure}")
