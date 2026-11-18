@@ -25,13 +25,14 @@
     { "command": "CMD-8", "event": "evidence.attached",      "eventSequence": 8,  "assessmentRevision": 8,  "detail": "EV-7" },
     { "command": "CMD-9", "event": "decision.recorded",      "eventSequence": 9,  "assessmentRevision": 8,  "detail": "DEC-1", "note": "sequence advances, facts do not" },
     { "command": "CMD-10", "event": "change.adopted",        "eventSequence": 10, "assessmentRevision": 9,  "detail": "CHG-1 venue change" },
-    { "command": "CMD-11", "event": "evidence.attached",     "eventSequence": 11, "assessmentRevision": 10, "detail": "EV-8" },
-    { "command": "CMD-12", "event": "evidence.attached",     "eventSequence": 12, "assessmentRevision": 11, "detail": "EV-9" },
-    { "command": "CMD-13", "event": "evidence.attached",     "eventSequence": 13, "assessmentRevision": 12, "detail": "EV-10" },
-    { "command": "CMD-14", "event": "evidence.attached",     "eventSequence": 14, "assessmentRevision": 13, "detail": "EV-11" },
-    { "command": "CMD-15", "event": "evidence.attached",     "eventSequence": 15, "assessmentRevision": 14, "detail": "EV-12" },
-    { "command": "CMD-16", "event": "evidence.attached",     "eventSequence": 16, "assessmentRevision": 15, "detail": "EV-13" },
-    { "command": "CMD-17", "event": "decision.recorded",     "eventSequence": 17, "assessmentRevision": 15, "detail": "DEC-2" }
+    { "command": "CMD-11", "event": "change.adopted",        "eventSequence": 11, "assessmentRevision": 10, "detail": "CHG-2 recovered plan" },
+    { "command": "CMD-12", "event": "evidence.attached",     "eventSequence": 12, "assessmentRevision": 11, "detail": "EV-8" },
+    { "command": "CMD-13", "event": "evidence.attached",     "eventSequence": 13, "assessmentRevision": 12, "detail": "EV-9" },
+    { "command": "CMD-14", "event": "evidence.attached",     "eventSequence": 14, "assessmentRevision": 13, "detail": "EV-10" },
+    { "command": "CMD-15", "event": "evidence.attached",     "eventSequence": 15, "assessmentRevision": 14, "detail": "EV-11" },
+    { "command": "CMD-16", "event": "evidence.attached",     "eventSequence": 16, "assessmentRevision": 15, "detail": "EV-12" },
+    { "command": "CMD-17", "event": "evidence.attached",     "eventSequence": 17, "assessmentRevision": 16, "detail": "EV-13" },
+    { "command": "CMD-18", "event": "decision.recorded",     "eventSequence": 18, "assessmentRevision": 16, "detail": "DEC-2" }
   ],
 
   "cases": [
@@ -159,7 +160,7 @@
       "id": "O4",
       "dependsOn": "O2",
       "state": "state.recovered",
-      "assessmentRevision": 15,
+      "assessmentRevision": 16,
       "evidenceRequired": ["EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13"],
       "requirementStatus": {
         "REQ-venue-loading-1": "supported",
@@ -175,9 +176,9 @@
       "decisionEligibility": {
         "eligible": true,
         "role": "project_manager",
-        "targetAssessmentRevision": 15
+        "targetAssessmentRevision": 16
       },
-      "note": "Every recovered value is stated by a referenced source and bound by a reviewed evidence record. No concession is asserted without support: the annex occupancy of 140 and access to 08:00 come from SRC-3 and SRC-8, the rescoped catering and production figures from SRC-6 and SRC-7, the crew call from SRC-9 and the run of show from SRC-10."
+      "note": "The recovered plan is adopted as CHG-2 at assessment revision 10; six evidence attachments follow, so recovery reaches 16. Every recovered value is stated by a referenced source and bound by a reviewed evidence record. No concession is asserted without support: the annex occupancy of 140 and access to 08:00 come from SRC-3 and SRC-8, the rescoped catering and production figures from SRC-6 and SRC-7, the crew call from SRC-9 and the run of show from SRC-10."
     },
 
     {
@@ -311,15 +312,15 @@
       "label": "Decision recorded at recovery remains current",
       "dependsOn": "O4",
       "trigger": {
-        "command": "CMD-17",
+        "command": "CMD-18",
         "action": "recordDecision",
-        "targetAssessmentRevision": 15,
+        "targetAssessmentRevision": 16,
         "actor": "PM-rowan",
         "role": "project_manager"
       },
       "expected": {
-        "eventSequence": 17,
-        "assessmentRevision": 15,
+        "eventSequence": 18,
+        "assessmentRevision": 16,
         "decisionId": "DEC-2",
         "decisionCurrentness": "current",
         "priorDecisions": [{ "id": "DEC-1", "currentness": "historical" }]

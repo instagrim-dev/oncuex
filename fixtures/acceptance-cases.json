@@ -318,9 +318,9 @@
     {
       "id": "V23",
       "area": "decision",
-      "action": "Record a second decision at the recovered assessment revision 15.",
+      "action": "Record a second decision at the recovered assessment revision 16.",
       "expected": {
-        "assessmentRevision": 15,
+        "assessmentRevision": 16,
         "decisionCurrentness": "current",
         "priorDecisions": [
           {

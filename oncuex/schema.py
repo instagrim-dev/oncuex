@@ -498,6 +498,7 @@ def validate_evidence_record(
     allowed = {
         "id",
         "requirementId",
+        "type",
         "sourceRefIds",
         "sourceExcerpt",
         "contentDigest",
@@ -514,6 +515,9 @@ def validate_evidence_record(
         errors.append(f"{label}: id must match EV-<n>")
     if requirement_ids is not None and ev.get("requirementId") not in requirement_ids:
         errors.append(f"{label}: unknown requirement {ev.get('requirementId')!r}")
+
+    if ev.get("type") not in EVIDENCE_TYPES:
+        errors.append(f"{label}: unknown evidence type {ev.get('type')!r}")
 
     refs = ev.get("sourceRefIds")
     if not isinstance(refs, list) or not refs or not all(isinstance(r, str) for r in refs):

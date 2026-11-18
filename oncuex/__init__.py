@@ -10,7 +10,11 @@ independent counters.
 
 from .engine import (
     SchemaError,
+    combine_impact,
+    dependent_closure,
     evaluate,
+    impact_of_change,
+    impact_of_expiry,
     integrated_checks,
     validate_snapshot,
     TYPED_PATHS,
@@ -22,6 +26,10 @@ __all__ = [
     "CommandError",
     "Store",
     "evaluate",
+    "impact_of_change",
+    "impact_of_expiry",
+    "combine_impact",
+    "dependent_closure",
     "integrated_checks",
     "validate_snapshot",
     "TYPED_PATHS",

@@ -73,11 +73,21 @@ def _predicate_ok(req: dict, snapshot: dict, evidence: dict) -> bool:
     return False
 
 
-def _evidence_for(req_id: str, evidence: Iterable[dict]) -> list[dict]:
-    return [e for e in evidence if e["requirementId"] == req_id]
+def _evidence_for(req: dict, evidence: Iterable[dict]) -> list[dict]:
+    """Only a record of the required type can support the requirement."""
+    return [
+        e
+        for e in evidence
+        if e["requirementId"] == req["id"] and e.get("type") == req["requiredEvidenceType"]
+    ]
 
 
-def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> dict:
+def evaluate(
+    snapshot: dict,
+    requirements: list[dict],
+    evidence: list[dict],
+    impact: dict | None = None,
+) -> dict:
     """Pure evaluation. Never writes, never records acceptance."""
     validate_snapshot(snapshot, requirements, evidence)
 
@@ -86,7 +96,7 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
     residuals: dict[str, list[dict]] = {}
 
     def direct_status(req: dict) -> tuple[str, list[dict]]:
-        records = _evidence_for(req["id"], evidence)
+        records = _evidence_for(req, evidence)
         admissible = [e for e in records if e["reviewDisposition"] == "accepted"]
         if not admissible:
             return "missing", [{"code": "mandatory_evidence_missing"}]
@@ -123,18 +133,22 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
             return "blocked", [{"code": "predicate_false"}]
         return "supported", []
 
-    # resolve prerequisites first (graph validated acyclic by the caller)
+    # Resolve prerequisites first. A cycle is a blocked condition, not a crash:
+    # ambiguous precedence must never default to supported.
+    graph = {rid: list(by_id[rid]["prerequisiteIds"]) for rid in by_id}
+    cycle_paths = _cycle_paths(graph)
+
     order: list[str] = []
     temporary: set[str] = set()
     permanent: set[str] = set()
 
     def visit(node: str) -> None:
-        if node in permanent:
+        if node in permanent or node in cycle_paths:
             return
         if node in temporary:
-            raise SchemaError(f"prerequisite cycle at {node}")
+            return
         temporary.add(node)
-        for parent in by_id[node]["prerequisiteIds"]:
+        for parent in graph[node]:
             visit(parent)
         temporary.discard(node)
         permanent.add(node)
@@ -142,6 +156,14 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
 
     for rid in by_id:
         visit(rid)
+
+    for rid, path in cycle_paths.items():
+        statuses[rid] = "blocked"
+        residuals[rid] = [{
+            "code": "prerequisite_cycle",
+            "path": path,
+            "prerequisiteIds": graph[rid],
+        }]
 
     for rid in order:
         req = by_id[rid]
@@ -170,7 +192,7 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
     if integrated["status"] == "fail":
         reason_codes.append("integration_failed")
 
-    return {
+    result = {
         "assessmentRevision": snapshot["assessmentRevision"],
         "requirements": [
             {
@@ -185,6 +207,9 @@ def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> 
         "readiness": "ready_for_review" if ready else "not_ready",
         "residualReasonCodes": reason_codes,
     }
+    if impact is not None:
+        result["impact"] = impact
+    return result
 
 
 def integrated_checks(snapshot: dict, requirements: list[dict], statuses: dict) -> dict:
@@ -269,6 +294,122 @@ def integrated_checks(snapshot: dict, requirements: list[dict], statuses: dict) 
         })
 
     return {"status": "fail" if checks else "pass", "checks": checks}
+
+
+def _cycle_paths(graph: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Return each requirement that sits on a prerequisite cycle, with a path."""
+    state: dict[str, int] = {}
+    stack: list[str] = []
+    cycles: dict[str, list[str]] = {}
+
+    def dfs(node: str) -> None:
+        state[node] = 1
+        stack.append(node)
+        for parent in graph.get(node, []):
+            if state.get(parent, 0) == 0:
+                dfs(parent)
+            elif state.get(parent) == 1:
+                start = stack.index(parent)
+                path = stack[start:] + [parent]
+                for member in stack[start:]:
+                    cycles.setdefault(member, list(path))
+        stack.pop()
+        state[node] = 2
+
+    for node in graph:
+        if state.get(node, 0) == 0:
+            dfs(node)
+    return cycles
+
+
+def dependent_closure(seeds: set[str], requirements: list[dict]) -> set[str]:
+    """Requirement ids affected by the seeds, following prerequisites downward."""
+    graph = {req["id"]: list(req["prerequisiteIds"]) for req in requirements}
+    affected = set(seeds)
+    changed = True
+    while changed:
+        changed = False
+        for rid, prerequisites in graph.items():
+            if rid not in affected and any(p in affected for p in prerequisites):
+                affected.add(rid)
+                changed = True
+    return affected
+
+
+def _impact_block(
+    requirements: list[dict],
+    evidence: list[dict],
+    affected_requirements: set[str],
+    affected_evidence: set[str],
+) -> dict:
+    return {
+        "impacted": {
+            "requirementIds": [r["id"] for r in requirements if r["id"] in affected_requirements],
+            "evidenceIds": [e["id"] for e in evidence if e["id"] in affected_evidence],
+        },
+        "unaffected": {
+            "requirementIds": [r["id"] for r in requirements if r["id"] not in affected_requirements],
+            "evidenceIds": [e["id"] for e in evidence if e["id"] not in affected_evidence],
+        },
+    }
+
+
+def impact_of_change(
+    changed_paths: set[str],
+    requirements: list[dict],
+    evidence: list[dict],
+) -> dict:
+    """Impact of a set of changed field paths, computed from declared bindings."""
+    changed = set(changed_paths)
+    seeds = {r["id"] for r in requirements if changed & set(r["fieldBindings"])}
+    seeds |= {e["requirementId"] for e in evidence if changed & set(e["boundFieldVersions"])}
+    affected_requirements = dependent_closure(seeds, requirements)
+    affected_evidence = {
+        e["id"]
+        for e in evidence
+        if e["requirementId"] in affected_requirements or changed & set(e["boundFieldVersions"])
+    }
+    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
+
+
+def impact_of_expiry(
+    requirements: list[dict],
+    evidence: list[dict],
+    now: str,
+) -> dict | None:
+    """Impact of currently expired evidence, propagated through dependents."""
+    expired = {
+        e["id"]
+        for e in evidence
+        if e.get("reviewDisposition") == "accepted" and is_expired(e, now)
+    }
+    if not expired:
+        return None
+    seeds = {e["requirementId"] for e in evidence if e["id"] in expired}
+    affected_requirements = dependent_closure(seeds, requirements)
+    affected_evidence = {
+        e["id"] for e in evidence if e["requirementId"] in affected_requirements
+    }
+    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
+
+
+def combine_impact(
+    blocks: list[dict | None],
+    requirements: list[dict],
+    evidence: list[dict],
+) -> dict | None:
+    """Union of impact triggers, with unaffected recomputed from the union."""
+    present = [block for block in blocks if block]
+    if not present:
+        return None
+    if len(present) == 1:
+        return present[0]
+    affected_requirements: set[str] = set()
+    affected_evidence: set[str] = set()
+    for block in present:
+        affected_requirements |= set(block["impacted"]["requirementIds"])
+        affected_evidence |= set(block["impacted"]["evidenceIds"])
+    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
 
 
 def _fmt(total: int) -> str:

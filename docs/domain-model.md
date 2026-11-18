@@ -105,6 +105,7 @@ A `time` is `HH:MM` on the event date. A `collection` is compared by `sha256` ov
 | --- | --- | --- |
 | `id` | string | |
 | `requirementId` | string | |
+| `type` | enum | `confirmation`, `document`, `measurement`, `quote`; must equal the requirement's `requiredEvidenceType` |
 | `sourceRefIds` | string[] | Every source the excerpt is drawn from |
 | `sourceExcerpt` | string | Required; must be textually present in a cited source |
 | `contentDigest` | string | `sha256` over `{sourceRefIds, sourceExcerpt}` |
@@ -260,6 +261,8 @@ A command is validated before any state is touched. A rejected write leaves the 
 ## Impact computation
 
 A requirement declares `fieldBindings`; evidence declares `boundFieldVersions`. A change computes the transitive dependent set over both `fieldBindings` and `prerequisiteIds`, and returns `impacted` and `unaffected` requirement and evidence IDs.
+
+An assessment reports `impact` for the last adopted change and for currently expired evidence. With neither trigger there is no impact block. The sets come from declared bindings and the prerequisite closure; an identifier list is never asserted directly.
 
 Dependency closure runs in both the change and the expiry case. Expiring a prerequisite's evidence makes every dependent `blocked`, not merely its own requirement `outdated`.
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from .engine import evaluate
+from .engine import combine_impact, evaluate, impact_of_change, impact_of_expiry
 from .schema import (
     FIELD_SCHEMA,
     TYPED_PATHS,
@@ -72,7 +72,34 @@ class Store:
         return snap
 
     def assess(self) -> dict:
-        return evaluate(self.snapshot(), self.requirements, self.evidence)
+        return evaluate(
+            self.snapshot(), self.requirements, self.evidence, impact=self.impact()
+        )
+
+    def impact(self) -> dict | None:
+        """Impact of the last adopted change and of currently expired evidence.
+
+        Both triggers are computed from declared bindings and the prerequisite
+        closure. When neither is present, no impact block is reported.
+        """
+        changed = self.last_changed_paths()
+        change = (
+            impact_of_change(changed, self.requirements, self.evidence) if changed else None
+        )
+        now = self.project.get("_now", "1970-01-01T00:00:00Z")
+        expiry = impact_of_expiry(self.requirements, self.evidence, now)
+        return combine_impact([change, expiry], self.requirements, self.evidence)
+
+    def last_changed_paths(self) -> set[str]:
+        """Changed paths recorded by the most recent adopted change.
+
+        Deriving this from the event log rather than instance state means a
+        reload reproduces the same impact without a private side channel.
+        """
+        for event in reversed(self.events):
+            if event["eventType"] == "change.adopted":
+                return set(event.get("payload", {}).get("changedPaths", ()))
+        return set()
 
     def latest_decision(self) -> dict | None:
         if not self._decisions:
@@ -201,7 +228,10 @@ class Store:
                 raise CommandError("type_mismatch", f"{path}={target!r}")
         for path, delta in fields.items():
             self._set_path(path, delta["to"])
-        return self._commit(command, "change.adopted", {"changeId": change["id"]})
+        return self._commit(command, "change.adopted", {
+            "changeId": change["id"],
+            "changedPaths": sorted(fields),
+        })
 
     def record_decision(self, command: dict) -> dict:
         # A repeated command returns the stored result before any other validation,

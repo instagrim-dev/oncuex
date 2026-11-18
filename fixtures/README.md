@@ -2,7 +2,7 @@
 
 A single fictional launch held across three states, so that change, impact and recovery can be specified exactly. Every amount asserted in any state is stated by a referenced source; see [Verification of asserted values](#verification-of-asserted-values).
 
-| Element | Baseline, assessment revision 8 | Venue change, assessment revision 9 | Corrected plan, assessment revision 15 |
+| Element | Baseline, assessment revision 8 | Venue change, assessment revision 9 | Corrected plan, assessment revision 16 |
 | --- | --- | --- | --- |
 | Venue | Foundry Hall, capacity 150 | Pier 9 Loft, capacity 110 | Pier 9 Loft plus annex, capacity 140 |
 | Loading window | 05:00–12:00 | 06:00–07:30 | 05:00–08:00 |
@@ -14,7 +14,7 @@ A single fictional launch held across three states, so that change, impact and r
 | Photographer | 120 images in 10 days | unchanged | unchanged |
 | Readiness | ready for review | not ready | ready for review |
 
-Guest count 120 and the $30,000 budget are fixed across all three states. Assessment revisions are stated because the baseline needs eight evidence-attachment events to reach `ready_for_review`; the numbers are consequences of the event log, not independent choices.
+Guest count 120 and the $30,000 budget are fixed across all three states. Assessment revisions are stated because the baseline needs eight evidence-attachment events to reach `ready_for_review`; the corrected plan is adopted as a change event, so recovery reaches 16 after six further evidence attachments. The numbers are consequences of the event log, not independent choices.
 
 ## Requirements
 
@@ -51,9 +51,9 @@ The corrected plan asserts four new concessions. Each is stated by a source and 
 | Recovered claim | Stated by | Bound by |
 | --- | --- | --- |
 | Annex raises licensed occupancy to 140 and extends access to 08:00 | `SRC-3`, `SRC-8` | `EV-9`, `EV-8` |
-| Combined venue fee is $1,245,000 | `SRC-3`, `SRC-12` | `EV-12` |
-| Catering rescoped to $895,000 | `SRC-6`, `SRC-12` | `EV-12` |
-| Production reduced build is $585,000 | `SRC-7`, `SRC-12` | `EV-12` |
+| Combined venue fee is $12,450 | `SRC-3`, `SRC-12` | `EV-12` |
+| Catering rescoped to $8,950 | `SRC-6`, `SRC-12` | `EV-12` |
+| Production reduced build is $5,850 | `SRC-7`, `SRC-12` | `EV-12` |
 | Crew call moves to 06:30 | `SRC-9` | `EV-10` |
 | Run of show ends 21:00 | `SRC-10` | `EV-11` |
 | Annex attestation reviewed to 2027-03-10 | `SRC-8` | `EV-13` |
@@ -61,6 +61,8 @@ The corrected plan asserts four new concessions. Each is stated by a source and 
 The recovered plan still requires current evidence and a new decision; consistency alone does not constitute acceptance. If a recovered value has no source, the correct behavior is to leave that requirement unresolved, not to mark it supported.
 
 ## Verification of asserted values
+
+Amounts in source text are dollars; state values are minor units. The validator converts dollars before comparing, so a match cannot be produced by comparing magnitudes alone.
 
 The scenario ships with a validator that enforces the contract mechanically:
 

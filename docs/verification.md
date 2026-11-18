@@ -81,7 +81,7 @@ Record a decision, confirm it reads `current`, then advance time past the expiry
 Reload directly after V20. Both counters are reconstructed from the event log: sequence 9, assessment revision 8. The decision is still `current` and the history is intact.
 
 **V23 — A later decision supersedes without rewriting.**
-At the recovered assessment revision 15, record a second decision. It is `current`; the first decision is `historical` and remains readable with its own target revision.
+At the recovered assessment revision 16, record a second decision. It is `current`; the first decision is `historical` and remains readable with its own target revision.
 
 ## Correctness conditions
 

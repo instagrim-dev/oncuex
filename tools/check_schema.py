@@ -174,6 +174,12 @@ def main() -> int:
     expect_rejection("duplicate requirement id rejected",
                      lambda d: d["requirements"][1].update({"id": d["requirements"][0]["id"]}),
                      "ids must be unique")
+    expect_rejection("evidence without a declared type rejected",
+                     lambda d: d["evidence"][0].pop("type"),
+                     "evidence type")
+    expect_rejection("unknown evidence type rejected",
+                     lambda d: d["evidence"][0].update({"type": "vibes"}),
+                     "unknown evidence type")
     expect_rejection("unknown evidence requirement rejected",
                      lambda d: d["evidence"][0].update({"requirementId": "REQ-missing-1"}),
                      "unknown requirement")

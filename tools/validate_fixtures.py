@@ -85,6 +85,18 @@ def check_state_digests(scn) -> None:
                 err(f"{ev['id']}: composite digest for {path} matches no state")
 
 
+def check_evidence_types(scn) -> None:
+    """Every requirement has at least one record of the type it demands."""
+    for req in scn["requirements"]:
+        matching = [
+            e["id"]
+            for e in scn["evidence"]
+            if e["requirementId"] == req["id"] and e["type"] == req["requiredEvidenceType"]
+        ]
+        if not matching:
+            err(f"{req['id']}: no evidence record of type {req['requiredEvidenceType']}")
+
+
 def check_provenance(scn) -> None:
     sources = {s["id"]: s for s in scn["sourceReferences"]}
     for ev in scn["evidence"]:
@@ -97,12 +109,17 @@ def check_provenance(scn) -> None:
 
 
 def check_amounts(scn) -> None:
-    def amounts(text: str) -> set[int]:
-        return {int(x.replace(",", "")) for x in re.findall(r"([0-9][0-9,]{2,})", text)}
+    """Every commitment is stated in dollars by a source, in minor units here."""
+
+    def amount_minor_units(text: str) -> set[int]:
+        return {
+            int(match.replace(",", "")) * 100
+            for match in re.findall(r"([0-9][0-9,]*)\s*USD", text)
+        }
 
     sourced: set[int] = set()
     for src in scn["sourceReferences"]:
-        sourced |= amounts(src["excerpt"])
+        sourced |= amount_minor_units(src["excerpt"])
     sourced |= {scn["scenario"]["brief"]["approvedBudget"]["minorUnits"]}
 
     for name, doc in scn["state"].items():
@@ -247,6 +264,32 @@ def check_oracle(scn, oracle) -> None:
         if exp.get("decisionCurrentness") != "current":
             err(f"{cid}: decision must read as current immediately after write")
 
+    # The recovered revision and decision sequence are consequences of the
+    # timeline, not independently chosen numbers.
+    timeline = oracle["timeline"]
+    o4 = cases["O4"]
+    o11 = cases["O11"]["expected"]
+    last_sequence = max(t["eventSequence"] for t in timeline)
+    last_revision = max(t["assessmentRevision"] for t in timeline)
+    if o4["assessmentRevision"] != last_revision:
+        err(f"O4 assessmentRevision {o4['assessmentRevision']} != timeline {last_revision}")
+    if o4["decisionEligibility"]["targetAssessmentRevision"] != o4["assessmentRevision"]:
+        err("O4 decision target does not equal the recovered revision")
+    if o11["eventSequence"] != last_sequence:
+        err(f"O11 eventSequence {o11['eventSequence']} != timeline {last_sequence}")
+    if o11["assessmentRevision"] != o4["assessmentRevision"]:
+        err("O11 assessmentRevision does not equal the recovered revision")
+    decisions = [t for t in timeline if t["event"] == "decision.recorded"]
+    if len(decisions) != 2:
+        err(f"timeline must record two decisions, found {len(decisions)}")
+    elif decisions[-1]["eventSequence"] != o11["eventSequence"]:
+        err("O11 is not the last recorded decision")
+    if not any(t["event"] == "change.adopted" and "recovered" in t.get("detail", "")
+               for t in timeline):
+        err("timeline adopts no recovered-plan change event")
+    if cases["O2"]["trigger"]["baseAssessmentRevision"] + 1 != cases["O2"]["assessmentRevision"]:
+        err("O2 assessmentRevision does not follow its base revision")
+
     sequence = [t["eventSequence"] for t in oracle["timeline"]]
     if sequence != sorted(sequence) or len(sequence) != len(set(sequence)):
         err("timeline eventSequence not strictly increasing")
@@ -294,6 +337,7 @@ def main() -> int:
         return 1
 
     check_state_digests(scenario)
+    check_evidence_types(scenario)
     check_provenance(scenario)
     check_amounts(scenario)
     check_oracle(scenario, oracle)

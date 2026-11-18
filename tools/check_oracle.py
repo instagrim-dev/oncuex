@@ -95,7 +95,7 @@ def main() -> int:
 
     # ------------------------------------------------------------ O4 recovery
     recovery_store = Store(
-        project_for(scenario, "recovered", 15),
+        project_for(scenario, "recovered", 16),
         scenario["requirements"],
         evidence_for(scenario, all_base | all_recovery),
     )
@@ -160,22 +160,22 @@ def main() -> int:
 
     # ------------------------------------------------------------ O11 supersede
     recovering = Store(
-        project_for(scenario, "recovered", 15),
+        project_for(scenario, "recovered", 16),
         scenario["requirements"],
         evidence_for(scenario, all_base | all_recovery),
     )
     recovering.record_decision({
         "commandId": "CMD-17", "actor": "PM-rowan", "role": "project_manager",
-        "decisionId": "DEC-2", "expectedAssessmentRevision": 15,
+        "decisionId": "DEC-2", "expectedAssessmentRevision": 16,
     })
     check("O11 current", recovering.currentness("DEC-2") == "current")
     check("O11 targets recovered revision",
-          recovering.latest_decision()["targetAssessmentRevision"] == 15)
+          recovering.latest_decision()["targetAssessmentRevision"] == 16)
 
     # ------------------------------------------------------------ defect classes
     # a stale record must not veto a requirement that current evidence supports
     superseded = Store(
-        project_for(scenario, "recovered", 15),
+        project_for(scenario, "recovered", 16),
         scenario["requirements"],
         evidence_for(scenario, all_base | all_recovery),
     )
