@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OnCueX">
+  <rect width="64" height="64" rx="14" fill="#2B2A63"/>
+  <path d="M14 25 32 16l18 9-18 9z" fill="#F2C078"/>
+  <path d="m14 33 18 9 18-9" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m14 41 18 9 18-9" fill="none" stroke="#F4F1EA" stroke-opacity=".62" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

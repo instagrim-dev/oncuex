@@ -1,0 +1,862 @@
+{
+  "schemaVersion": "1.1",
+  "fixtureVersion": "2.0.0",
+  "provenance": {
+    "kind": "synthetic",
+    "note": "All persons, organisations, venues, amounts and confirmations are fictional. Every amount in the budget is stated by a referenced source; times and costs are reference values selected so that the venue change produces the conflicts the readiness rules detect."
+  },
+  "scenario": {
+    "id": "PRJ-oncuex-launch",
+    "milestoneIds": [
+      "MS-1"
+    ],
+    "requirementSetVersion": 1,
+    "brief": {
+      "client": "Northwind Provisions",
+      "project": "Spring product launch reception",
+      "guestCount": 120,
+      "guestCountIsFixed": true,
+      "eventDate": "2027-03-14",
+      "timezone": "America/Los_Angeles",
+      "approvedBudget": {
+        "currency": "USD",
+        "minorUnits": 3000000
+      },
+      "owner": {
+        "id": "PM-rowan",
+        "name": "Rowan Iyer",
+        "role": "project_manager"
+      },
+      "openQuestions": [
+        "Does the venue provide a freight lift for the 1.2 m scenic panels?",
+        "Is the photograph delivery date a hard client requirement or a preference?"
+      ],
+      "circulationBuffer": 10
+    },
+    "contributors": [
+      {
+        "id": "CON-ana",
+        "name": "Ana Duarte",
+        "role": "contributor",
+        "simulated": true
+      },
+      {
+        "id": "CON-priya",
+        "name": "Priya Nandakumar",
+        "role": "contributor",
+        "simulated": true
+      }
+    ]
+  },
+  "milestones": [
+    {
+      "id": "MS-1",
+      "label": "Launch reception delivered",
+      "projectManagerId": "PM-rowan"
+    }
+  ],
+  "fieldSchema": {
+    "assessmentRevision": {
+      "type": "integer"
+    },
+    "brief.guestCount": {
+      "type": "integer"
+    },
+    "brief.approvedBudget.minorUnits": {
+      "type": "integer"
+    },
+    "location.venueId": {
+      "type": "string"
+    },
+    "location.venueName": {
+      "type": "string"
+    },
+    "location.capacity": {
+      "type": "integer"
+    },
+    "location.roomPlan": {
+      "type": "string"
+    },
+    "location.loadingWindow.start": {
+      "type": "time"
+    },
+    "location.loadingWindow.end": {
+      "type": "time"
+    },
+    "location.hardStop": {
+      "type": "time"
+    },
+    "location.fireAttestation": {
+      "type": "enum",
+      "values": [
+        "reviewed",
+        "not_reviewed",
+        "missing"
+      ]
+    },
+    "crew.arrivalTime": {
+      "type": "time"
+    },
+    "production.runOfShowEnd": {
+      "type": "time"
+    },
+    "budget.commitments": {
+      "type": "collection",
+      "compare": "digest"
+    },
+    "budget.committedTotal.currency": {
+      "type": "string"
+    },
+    "budget.committedTotal.minorUnits": {
+      "type": "integer"
+    },
+    "photographer.arrivalWindow.start": {
+      "type": "time"
+    },
+    "photographer.arrivalWindow.end": {
+      "type": "time"
+    },
+    "photographer.deliverables.editedImages": {
+      "type": "integer"
+    },
+    "photographer.deliverables.deliveryDays": {
+      "type": "integer"
+    }
+  },
+  "requirements": [
+    {
+      "id": "REQ-venue-loading-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Venue loading window covers crew arrival plus setup",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "setupMinutes": 45
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.loadingWindow.start",
+        "location.loadingWindow.end",
+        "crew.arrivalTime"
+      ]
+    },
+    {
+      "id": "REQ-venue-capacity-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Venue capacity covers guests plus circulation buffer",
+      "predicateType": "numeric_within",
+      "expectedValues": {
+        "field": "location.capacity",
+        "minimum": 130,
+        "unit": "people"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.capacity",
+        "brief.guestCount"
+      ]
+    },
+    {
+      "id": "REQ-crew-arrival-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Crew call time is inside venue access",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "setupMinutes": 0
+      },
+      "prerequisiteIds": [
+        "REQ-venue-loading-1"
+      ],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "crew.arrivalTime",
+        "location.loadingWindow.start",
+        "location.loadingWindow.end"
+      ]
+    },
+    {
+      "id": "REQ-production-runofshow-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Run of show ends before the venue hard stop",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "marginMinutes": 30
+      },
+      "prerequisiteIds": [
+        "REQ-venue-loading-1"
+      ],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "production.runOfShowEnd",
+        "location.hardStop",
+        "location.venueId"
+      ]
+    },
+    {
+      "id": "REQ-budget-total-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "PM-rowan",
+      "label": "Committed total stays within the approved budget",
+      "predicateType": "numeric_within",
+      "expectedValues": {
+        "field": "budget.committedTotal.minorUnits",
+        "maximumMinorUnits": 3000000,
+        "unit": "USD"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-01T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "budget.commitments",
+        "brief.approvedBudget.minorUnits"
+      ]
+    },
+    {
+      "id": "REQ-fire-permit-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Venue fire and occupancy attestation reviewed for the booked venue",
+      "predicateType": "attestation_reviewed",
+      "expectedValues": {
+        "attestationField": "location.fireAttestation"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-10T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.fireAttestation"
+      ]
+    },
+    {
+      "id": "REQ-photographer-deliverables-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Photographer delivers 120 edited images within 10 days",
+      "predicateType": "evidence_present",
+      "expectedValues": {
+        "deliverableCount": 120,
+        "deliveryDays": 10
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-12T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "photographer.deliverables.editedImages",
+        "photographer.deliverables.deliveryDays",
+        "photographer.arrivalWindow.start",
+        "photographer.arrivalWindow.end"
+      ]
+    }
+  ],
+  "sourceReferences": [
+    {
+      "id": "SRC-1",
+      "kind": "brief",
+      "excerpt": "Launch reception for 120 guests. Budget ceiling 30,000 USD. Date fixed. Venue not yet final.",
+      "attribution": "Client brief, paragraph 1",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-2",
+      "kind": "vendor_document",
+      "excerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
+      "attribution": "Venue pack, Foundry Hall, page 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-3",
+      "kind": "vendor_document",
+      "excerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 11,850 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 600 USD, combined venue fee 12,450 USD.",
+      "attribution": "Venue pack, Pier 9 Loft, page 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-4",
+      "kind": "photo_plan",
+      "excerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 240,000 USD.",
+      "attribution": "Photography scope, section 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-5",
+      "kind": "internal_note",
+      "excerpt": "Crew call 07:00, 45 minutes to first scenic panel.",
+      "attribution": "Production note, line 4",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-6",
+      "kind": "vendor_document",
+      "excerpt": "Cedar & Salt caterer, original quote: 11,000 USD for 120 covers. Revised menu omitting the plated dessert course: 8,950 USD.",
+      "attribution": "Catering quote, lines 3 and 7",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-7",
+      "kind": "vendor_document",
+      "excerpt": "Lantern Studio production, original quote: 6,200 USD. Reduced scenic build omitting the suspended banner: 5,850 USD.",
+      "attribution": "Production quote, lines 2 and 5",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-8",
+      "kind": "vendor_document",
+      "excerpt": "Pier 9 Loft annex: fire and occupancy attestation current to 2027-03-10, licensed occupancy 140, freight access to 08:00.",
+      "attribution": "Annex attestation, page 1",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-9",
+      "kind": "internal_note",
+      "excerpt": "Crew call moved to 06:30 to use the extended annex access 05:00-08:00; 45 minutes to first scenic panel.",
+      "attribution": "Production note, revision 2, line 1",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-10",
+      "kind": "internal_note",
+      "excerpt": "Run of show revised to end 21:00, keeping a 90 minute margin before the 22:30 hard stop.",
+      "attribution": "Production note, revision 2, line 6",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-11",
+      "kind": "vendor_document",
+      "excerpt": "Mira Okonjo photography: 2,400 USD, 120 edited images within 10 days.",
+      "attribution": "Photography agreement, section 4",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-12",
+      "kind": "internal_note",
+      "excerpt": "Budget reconciliation. Foundry Hall plan: venue 9,500; catering 11,000; production 6,200; photography 2,400; total 29,100 USD. Pier 9 Loft plan before recovery: venue 11,850; catering 11,000; production 6,200; photography 2,400; total 31,450 USD. Pier 9 Loft plan after recovery: venue including annex 12,450; catering rescoped 8,950; production reduced build 5,850; photography 2,400; total 29,650 USD.",
+      "attribution": "Finance reconciliation, revision 3",
+      "trust": "untrusted_for_instructions"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "EV-1",
+      "requirementId": "REQ-venue-loading-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-2"
+      ],
+      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
+      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+      "artifactRef": "synthetic://REQ-venue-loading-1/EV-1.pdf",
+      "issuer": "VEN-A",
+      "observedAt": "2027-02-20T09:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.loadingWindow.start": "05:00",
+        "location.loadingWindow.end": "12:00",
+        "crew.arrivalTime": "07:00"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-2",
+      "requirementId": "REQ-venue-capacity-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-2"
+      ],
+      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
+      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+      "artifactRef": "synthetic://REQ-venue-capacity-1/EV-2.pdf",
+      "issuer": "VEN-A",
+      "observedAt": "2027-02-20T09:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.capacity": 150,
+        "brief.guestCount": 120
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-3",
+      "requirementId": "REQ-crew-arrival-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-5"
+      ],
+      "sourceExcerpt": "Crew call 07:00, 45 minutes to first scenic panel.",
+      "contentDigest": "sha256:2ded8c074564f87e39bd2f9544e34055e0985c5f8c89e4c3a681a926637f3631",
+      "artifactRef": "synthetic://REQ-crew-arrival-1/EV-3.pdf",
+      "issuer": "CON-ana",
+      "observedAt": "2027-02-21T10:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "crew.arrivalTime": "07:00",
+        "location.loadingWindow.start": "05:00",
+        "location.loadingWindow.end": "12:00"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-4",
+      "requirementId": "REQ-production-runofshow-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-5"
+      ],
+      "sourceExcerpt": "Crew call 07:00, 45 minutes to first scenic panel.",
+      "contentDigest": "sha256:2ded8c074564f87e39bd2f9544e34055e0985c5f8c89e4c3a681a926637f3631",
+      "artifactRef": "synthetic://REQ-production-runofshow-1/EV-4.pdf",
+      "issuer": "CON-ana",
+      "observedAt": "2027-02-21T10:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "production.runOfShowEnd": "22:00",
+        "location.hardStop": "23:00",
+        "location.venueId": "VEN-A"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-5",
+      "requirementId": "REQ-budget-total-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-12"
+      ],
+      "sourceExcerpt": "Foundry Hall plan: venue 9,500; catering 11,000; production 6,200; photography 2,400; total 29,100 USD.",
+      "contentDigest": "sha256:d5f353d09a1d6e2fbbd4ebad0eca44214fa90c8911a8e23834f46b8a5ba5758f",
+      "artifactRef": "synthetic://REQ-budget-total-1/EV-5.pdf",
+      "issuer": "PM-rowan",
+      "observedAt": "2027-02-22T12:00:00Z",
+      "expiresAt": "2027-03-01T00:00:00Z",
+      "boundFieldVersions": {
+        "budget.commitments": "sha256:5984f81ffd2ff226583c56d82b9f6d4ed16183dafcd9e70a0af6790ef842df70",
+        "brief.approvedBudget.minorUnits": 3000000
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-6",
+      "requirementId": "REQ-fire-permit-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-2"
+      ],
+      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
+      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+      "artifactRef": "synthetic://REQ-fire-permit-1/EV-6.pdf",
+      "issuer": "VEN-A",
+      "observedAt": "2027-02-20T09:00:00Z",
+      "expiresAt": "2027-03-10T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.fireAttestation": "reviewed"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-7",
+      "requirementId": "REQ-photographer-deliverables-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-4",
+        "SRC-11"
+      ],
+      "sourceExcerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event, fee 240,000 USD.",
+      "contentDigest": "sha256:ae74af97627555a28aea7dc9bca214bcea190a50ecdd60aa314381b7d69b751e",
+      "artifactRef": "synthetic://REQ-photographer-deliverables-1/EV-7.pdf",
+      "issuer": "CON-priya",
+      "observedAt": "2027-02-18T15:00:00Z",
+      "expiresAt": "2027-03-12T00:00:00Z",
+      "boundFieldVersions": {
+        "photographer.deliverables.editedImages": 120,
+        "photographer.deliverables.deliveryDays": 10,
+        "photographer.arrivalWindow.start": "16:00",
+        "photographer.arrivalWindow.end": "21:00"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-8",
+      "requirementId": "REQ-venue-loading-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-9"
+      ],
+      "sourceExcerpt": "Crew call moved to 06:30 to use the extended annex access 05:00-08:00; 45 minutes to first scenic panel.",
+      "contentDigest": "sha256:b8ae767262bac7a0d16af385af020e9eb6549ebfbc7bcd0dc084cb0f8c67f167",
+      "artifactRef": "synthetic://REQ-venue-loading-1/EV-8.pdf",
+      "issuer": "VEN-B",
+      "observedAt": "2027-03-01T09:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-B",
+        "location.loadingWindow.start": "05:00",
+        "location.loadingWindow.end": "08:00",
+        "crew.arrivalTime": "06:30"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-9",
+      "requirementId": "REQ-venue-capacity-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-3",
+        "SRC-8"
+      ],
+      "sourceExcerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 11,850 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 600 USD, combined venue fee 12,450 USD.",
+      "contentDigest": "sha256:3401f34e8c8c45b7e89ff5daf67eeb2c89d1d4bcfb605dabe32a0b86272f6222",
+      "artifactRef": "synthetic://REQ-venue-capacity-1/EV-9.pdf",
+      "issuer": "VEN-B",
+      "observedAt": "2027-03-01T09:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-B",
+        "location.capacity": 140,
+        "brief.guestCount": 120
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-10",
+      "requirementId": "REQ-crew-arrival-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-9"
+      ],
+      "sourceExcerpt": "Crew call moved to 06:30 to use the extended annex access 05:00-08:00; 45 minutes to first scenic panel.",
+      "contentDigest": "sha256:b8ae767262bac7a0d16af385af020e9eb6549ebfbc7bcd0dc084cb0f8c67f167",
+      "artifactRef": "synthetic://REQ-crew-arrival-1/EV-10.pdf",
+      "issuer": "CON-ana",
+      "observedAt": "2027-03-01T10:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "crew.arrivalTime": "06:30",
+        "location.loadingWindow.start": "05:00",
+        "location.loadingWindow.end": "08:00"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-11",
+      "requirementId": "REQ-production-runofshow-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-10"
+      ],
+      "sourceExcerpt": "Run of show revised to end 21:00, keeping a 90 minute margin before the 22:30 hard stop.",
+      "contentDigest": "sha256:6aab4d7d3ae170e09200e88c41de1425bb5a237a5dbc8ebdea3d25cabc2fcc1e",
+      "artifactRef": "synthetic://REQ-production-runofshow-1/EV-11.pdf",
+      "issuer": "CON-ana",
+      "observedAt": "2027-03-01T10:00:00Z",
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "boundFieldVersions": {
+        "production.runOfShowEnd": "21:00",
+        "location.hardStop": "22:30",
+        "location.venueId": "VEN-B"
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-12",
+      "requirementId": "REQ-budget-total-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-12"
+      ],
+      "sourceExcerpt": "Pier 9 Loft plan after recovery: venue including annex 12,450; catering rescoped 8,950; production reduced build 5,850; photography 2,400; total 29,650 USD.",
+      "contentDigest": "sha256:9781b6827c93cb606cc5aa2dab51df6a6d7f98f47492985037810d7f7ae181a0",
+      "artifactRef": "synthetic://REQ-budget-total-1/EV-12.pdf",
+      "issuer": "PM-rowan",
+      "observedAt": "2027-03-01T12:00:00Z",
+      "expiresAt": "2027-03-05T00:00:00Z",
+      "boundFieldVersions": {
+        "budget.commitments": "sha256:b99ab276f7d34311b527acea29358eb34ece73ee087bef9194af00b9ebdfac1c",
+        "brief.approvedBudget.minorUnits": 3000000
+      },
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-13",
+      "requirementId": "REQ-fire-permit-1",
+      "type": "document",
+      "sourceRefIds": [
+        "SRC-8"
+      ],
+      "sourceExcerpt": "Pier 9 Loft annex: fire and occupancy attestation current to 2027-03-10, licensed occupancy 140, freight access to 08:00.",
+      "contentDigest": "sha256:94c5f22273bd5dc17a7511c09c820181eff8ab107cc22bdf062abd1c4dc4066d",
+      "artifactRef": "synthetic://REQ-fire-permit-1/EV-13.pdf",
+      "issuer": "VEN-B",
+      "observedAt": "2027-03-01T09:00:00Z",
+      "expiresAt": "2027-03-10T00:00:00Z",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-B",
+        "location.fireAttestation": "reviewed"
+      },
+      "reviewDisposition": "accepted"
+    }
+  ],
+  "state": {
+    "baseline": {
+      "assessmentRevision": 8,
+      "location": {
+        "venueId": "VEN-A",
+        "venueName": "Foundry Hall",
+        "capacity": 150,
+        "loadingWindow": {
+          "start": "05:00",
+          "end": "12:00"
+        },
+        "hardStop": "23:00",
+        "fireAttestation": "reviewed",
+        "roomPlan": "main"
+      },
+      "crew": {
+        "arrivalTime": "07:00"
+      },
+      "production": {
+        "runOfShowEnd": "22:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Foundry Hall",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 950000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1100000
+            }
+          },
+          {
+            "vendor": "Lantern Studio",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 620000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 2910000
+        }
+      }
+    },
+    "venueChange": {
+      "assessmentRevision": 9,
+      "location": {
+        "venueId": "VEN-B",
+        "venueName": "Pier 9 Loft",
+        "capacity": 110,
+        "loadingWindow": {
+          "start": "06:00",
+          "end": "07:30"
+        },
+        "hardStop": "21:30",
+        "fireAttestation": "not_reviewed",
+        "roomPlan": "loft"
+      },
+      "crew": {
+        "arrivalTime": "07:15"
+      },
+      "production": {
+        "runOfShowEnd": "22:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Pier 9 Loft",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1185000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1100000
+            }
+          },
+          {
+            "vendor": "Lantern Studio",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 620000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 3145000
+        }
+      }
+    },
+    "recovered": {
+      "assessmentRevision": 16,
+      "location": {
+        "venueId": "VEN-B",
+        "venueName": "Pier 9 Loft",
+        "capacity": 140,
+        "loadingWindow": {
+          "start": "05:00",
+          "end": "08:00"
+        },
+        "hardStop": "22:30",
+        "fireAttestation": "reviewed",
+        "roomPlan": "loft+annex"
+      },
+      "crew": {
+        "arrivalTime": "06:30"
+      },
+      "production": {
+        "runOfShowEnd": "21:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Pier 9 Loft incl. annex",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1245000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt rescoped",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 895000
+            }
+          },
+          {
+            "vendor": "Lantern Studio reduced build",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 585000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 2965000
+        }
+      }
+    }
+  }
+}

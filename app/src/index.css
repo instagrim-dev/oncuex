@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 98%;
+    --foreground: 233 27% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 233 27% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 233 27% 14%;
+
+    --primary: 244 47% 27%;
+    --primary-foreground: 40 33% 98%;
+
+    --secondary: 240 20% 94%;
+    --secondary-foreground: 244 30% 22%;
+
+    --muted: 240 16% 95%;
+    --muted-foreground: 235 10% 42%;
+
+    --accent: 34 88% 92%;
+    --accent-foreground: 26 60% 26%;
+
+    --destructive: 356 68% 45%;
+    --destructive-foreground: 40 33% 98%;
+
+    --success: 156 62% 27%;
+    --success-foreground: 40 33% 98%;
+
+    --warning: 32 88% 36%;
+    --warning-foreground: 40 33% 98%;
+
+    --info: 214 62% 38%;
+    --info-foreground: 40 33% 98%;
+
+    --border: 236 18% 88%;
+    --input: 236 18% 86%;
+    --ring: 244 47% 40%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --shadow-panel: 0 1px 2px hsl(233 27% 14% / 0.04), 0 12px 32px -24px hsl(233 27% 14% / 0.35);
+    --shadow-lift: 0 2px 4px hsl(233 27% 14% / 0.05), 0 24px 48px -32px hsl(244 47% 27% / 0.45);
+    --gradient-hero: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.08) 0%,
+      hsl(var(--accent) / 0.55) 55%,
+      hsl(var(--card)) 100%
+    );
+  }
+
+  .dark {
+    --background: 234 26% 8%;
+    --foreground: 40 25% 94%;
+
+    --card: 234 22% 11%;
+    --card-foreground: 40 25% 94%;
+
+    --popover: 234 24% 10%;
+    --popover-foreground: 40 25% 94%;
+
+    --primary: 243 60% 66%;
+    --primary-foreground: 234 30% 10%;
+
+    --secondary: 235 18% 17%;
+    --secondary-foreground: 40 25% 94%;
+
+    --muted: 235 16% 15%;
+    --muted-foreground: 235 12% 66%;
+
+    --accent: 34 45% 20%;
+    --accent-foreground: 38 80% 82%;
+
+    --destructive: 356 65% 52%;
+    --destructive-foreground: 240 30% 8%;
+
+    --success: 154 50% 60%;
+    --success-foreground: 240 30% 8%;
+
+    --warning: 36 85% 60%;
+    --warning-foreground: 240 30% 8%;
+
+    --info: 210 70% 66%;
+    --info-foreground: 240 30% 8%;
+
+    --border: 235 16% 21%;
+    --input: 235 16% 24%;
+    --ring: 243 60% 66%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --shadow-panel: 0 1px 2px hsl(0 0% 0% / 0.4), 0 16px 40px -28px hsl(0 0% 0% / 0.8);
+    --shadow-lift: 0 2px 6px hsl(0 0% 0% / 0.5), 0 28px 56px -36px hsl(243 60% 66% / 0.4);
+    --gradient-hero: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.16) 0%,
+      hsl(var(--accent) / 0.45) 55%,
+      hsl(var(--card)) 100%
+    );
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(52rem 34rem at 108% -12%, hsl(var(--primary) / 0.1), transparent 62%),
+      radial-gradient(38rem 26rem at -8% 0%, hsl(var(--accent) / 0.4), transparent 58%);
+    background-attachment: fixed;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply tracking-tight;
+    text-wrap: balance;
+  }
+}
+
+@layer utilities {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel-shadow {
+    box-shadow: var(--shadow-panel);
+  }
+
+  .lift-shadow {
+    box-shadow: var(--shadow-lift);
+  }
+
+  .bg-hero {
+    background-image: var(--gradient-hero);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
