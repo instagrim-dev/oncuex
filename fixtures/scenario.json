@@ -1,0 +1,480 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureVersion": "1.0.0",
+  "provenance": {
+    "kind": "synthetic",
+    "note": "All persons, organisations, venues, prices and confirmations are fictional. Times and costs are reference values selected so that the venue change produces the conflicts the readiness rules detect."
+  },
+  "scenario": {
+    "id": "PRJ-oncuex-launch",
+    "revision": 1,
+    "milestoneIds": [
+      "MS-1"
+    ],
+    "requirementSetVersion": 1,
+    "brief": {
+      "client": "Northwind Provisions (fictional)",
+      "project": "Spring product launch reception",
+      "guestCount": 120,
+      "guestCountIsFixed": true,
+      "eventDate": "2027-03-14",
+      "timezone": "America/Los_Angeles",
+      "approvedBudget": {
+        "currency": "USD",
+        "minorUnits": 3000000
+      },
+      "owner": {
+        "id": "PM-rowan",
+        "name": "Rowan Iyer",
+        "role": "project_manager"
+      },
+      "openQuestions": [
+        "Does the venue provide a freight lift for the 1.2 m scenic panels?",
+        "Is the photograph delivery date a hard client requirement or a preference?"
+      ]
+    },
+    "contributors": [
+      {
+        "id": "CON-ana",
+        "name": "Ana Duarte",
+        "role": "contributor",
+        "simulated": true
+      },
+      {
+        "id": "CON-priya",
+        "name": "Priya Nandakumar",
+        "role": "contributor",
+        "simulated": true
+      }
+    ]
+  },
+  "milestones": [
+    {
+      "id": "MS-1",
+      "label": "Launch reception delivered",
+      "projectManagerId": "PM-rowan"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-venue-loading-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Venue loading window covers crew arrival plus setup",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "setupMinutes": 45
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "confirmation",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.loadingWindow",
+        "crew.arrivalTime"
+      ]
+    },
+    {
+      "id": "REQ-venue-capacity-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Venue capacity covers guests plus circulation buffer",
+      "predicateType": "numeric_within",
+      "expectedValues": {
+        "field": "location.capacity",
+        "minimum": 130,
+        "unit": "people"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.capacity",
+        "brief.guestCount"
+      ]
+    },
+    {
+      "id": "REQ-crew-arrival-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Crew call time is inside venue access",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "setupMinutes": 0
+      },
+      "prerequisiteIds": [
+        "REQ-venue-loading-1"
+      ],
+      "requiredEvidenceType": "confirmation",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "crew.arrivalTime",
+        "location.loadingWindow"
+      ]
+    },
+    {
+      "id": "REQ-production-runofshow-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Run of show ends before the venue hard stop",
+      "predicateType": "time_within_window",
+      "expectedValues": {
+        "marginMinutes": 30
+      },
+      "prerequisiteIds": [
+        "REQ-venue-loading-1"
+      ],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-07T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "production.runOfShow",
+        "location.hardStop",
+        "location.venueId"
+      ]
+    },
+    {
+      "id": "REQ-budget-total-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "PM-rowan",
+      "label": "Committed total stays within the approved budget",
+      "predicateType": "numeric_within",
+      "expectedValues": {
+        "field": "budget.committedTotal",
+        "maximumMinorUnits": 3000000,
+        "unit": "USD"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "quote",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-01T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "budget.commitments",
+        "brief.approvedBudget"
+      ]
+    },
+    {
+      "id": "REQ-fire-permit-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-ana",
+      "label": "Venue fire and occupancy attestation reviewed for the booked venue",
+      "predicateType": "attestation_reviewed",
+      "expectedValues": {
+        "attestationField": "location.fireAttestation"
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "document",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-10T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "location.venueId",
+        "location.fireAttestation"
+      ]
+    },
+    {
+      "id": "REQ-photographer-deliverables-1",
+      "version": 1,
+      "milestoneId": "MS-1",
+      "owner": "CON-priya",
+      "label": "Photographer delivers 120 edited images within 10 days",
+      "predicateType": "evidence_present",
+      "expectedValues": {
+        "deliverableCount": 120,
+        "deliveryDays": 10
+      },
+      "prerequisiteIds": [],
+      "requiredEvidenceType": "confirmation",
+      "expiryPolicy": {
+        "mode": "absolute",
+        "value": "2027-03-12T00:00:00Z"
+      },
+      "blocking": true,
+      "fieldBindings": [
+        "photographer.deliverables",
+        "photographer.arrivalWindow"
+      ]
+    }
+  ],
+  "sourceReferences": [
+    {
+      "id": "SRC-1",
+      "kind": "brief",
+      "excerpt": "Launch reception for 120 guests. Budget ceiling 30,000 USD. Date fixed. Venue not yet final.",
+      "attribution": "Synthetic client brief, paragraph 1",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-2",
+      "kind": "vendor_document",
+      "excerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00.",
+      "attribution": "Synthetic venue pack, Foundry Hall, page 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-3",
+      "kind": "vendor_document",
+      "excerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30. Adjoining annex raises occupancy to 140 and extends access to 08:00 for an added fee.",
+      "attribution": "Synthetic venue pack, Pier 9 Loft, page 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-4",
+      "kind": "photo_plan",
+      "excerpt": "Coverage 16:00-21:00, 120 edited images delivered within 10 days of the event.",
+      "attribution": "Synthetic photography scope, section 2",
+      "trust": "untrusted_for_instructions"
+    },
+    {
+      "id": "SRC-5",
+      "kind": "internal_note",
+      "excerpt": "Crew call 07:00, 45 minutes to first scenic panel.",
+      "attribution": "Synthetic production note, line 4",
+      "trust": "untrusted_for_instructions"
+    }
+  ],
+  "state": {
+    "baseline": {
+      "revision": 1,
+      "label": "Venue A",
+      "location": {
+        "venueId": "VEN-A",
+        "venueName": "Foundry Hall (fictional)",
+        "capacity": 150,
+        "loadingWindow": {
+          "start": "05:00",
+          "end": "12:00"
+        },
+        "hardStop": "23:00",
+        "fireAttestation": "reviewed",
+        "roomPlan": "main"
+      },
+      "crew": {
+        "arrivalTime": "07:00"
+      },
+      "production": {
+        "runOfShowEnd": "22:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Foundry Hall (fictional)",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 950000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt Catering (fictional)",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1100000
+            }
+          },
+          {
+            "vendor": "Lantern Studio (fictional)",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 620000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo (fictional)",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 2910000
+        }
+      }
+    },
+    "venueChange": {
+      "revision": 2,
+      "label": "Venue B",
+      "location": {
+        "venueId": "VEN-B",
+        "venueName": "Pier 9 Loft (fictional)",
+        "capacity": 110,
+        "loadingWindow": {
+          "start": "06:00",
+          "end": "07:30"
+        },
+        "hardStop": "21:30",
+        "fireAttestation": "not_reviewed",
+        "roomPlan": "loft"
+      },
+      "crew": {
+        "arrivalTime": "07:15"
+      },
+      "production": {
+        "runOfShowEnd": "22:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Pier 9 Loft (fictional)",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1185000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt Catering (fictional)",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1100000
+            }
+          },
+          {
+            "vendor": "Lantern Studio (fictional)",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 620000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo (fictional)",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 3145000
+        }
+      }
+    },
+    "recovered": {
+      "label": "Corrected plan",
+      "location": {
+        "venueId": "VEN-B",
+        "venueName": "Pier 9 Loft (fictional)",
+        "capacity": 140,
+        "loadingWindow": {
+          "start": "05:00",
+          "end": "08:00"
+        },
+        "hardStop": "22:30",
+        "fireAttestation": "reviewed",
+        "roomPlan": "loft+annex"
+      },
+      "crew": {
+        "arrivalTime": "06:30"
+      },
+      "production": {
+        "runOfShowEnd": "21:00"
+      },
+      "photographer": {
+        "arrivalWindow": {
+          "start": "16:00",
+          "end": "21:00"
+        },
+        "deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "budget": {
+        "commitments": [
+          {
+            "vendor": "Pier 9 Loft (fictional), loft plus annex",
+            "category": "venue",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 1185000
+            }
+          },
+          {
+            "vendor": "Cedar & Salt Catering (fictional), rescoped menu",
+            "category": "catering",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 980000
+            }
+          },
+          {
+            "vendor": "Lantern Studio (fictional), reduced scenic build",
+            "category": "production",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 560000
+            }
+          },
+          {
+            "vendor": "Mira Okonjo (fictional)",
+            "category": "photography",
+            "amount": {
+              "currency": "USD",
+              "minorUnits": 240000
+            }
+          }
+        ],
+        "committedTotal": {
+          "currency": "USD",
+          "minorUnits": 2965000
+        }
+      }
+    }
+  }
+}

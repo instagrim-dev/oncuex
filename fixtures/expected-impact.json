@@ -1,0 +1,351 @@
+{
+  "schemaVersion": "1.0",
+  "oracleVersion": "1.0.0",
+  "derivedFrom": "scenario.json",
+  "provenance": {
+    "kind": "synthetic",
+    "note": "Expected outcomes for the reference scenario."
+  },
+  "cases": [
+    {
+      "id": "O1",
+      "state": "state.baseline",
+      "requirementStatus": {
+        "REQ-venue-loading-1": "supported",
+        "REQ-venue-capacity-1": "supported",
+        "REQ-crew-arrival-1": "supported",
+        "REQ-production-runofshow-1": "supported",
+        "REQ-budget-total-1": "supported",
+        "REQ-fire-permit-1": "supported",
+        "REQ-photographer-deliverables-1": "supported"
+      },
+      "integrated": {
+        "status": "pass",
+        "failingChecks": []
+      },
+      "readiness": "ready_for_review",
+      "decisionEligibility": {
+        "eligible": true,
+        "role": "project_manager",
+        "targetRevision": 1
+      }
+    },
+    {
+      "id": "O2",
+      "state": "state.venueChange",
+      "trigger": {
+        "changeFields": [
+          "location.venueId",
+          "location.capacity",
+          "location.loadingWindow",
+          "location.hardStop",
+          "location.fireAttestation",
+          "crew.arrivalTime",
+          "budget.commitments"
+        ],
+        "baseRevision": 1
+      },
+      "requirementStatus": {
+        "REQ-venue-loading-1": "outdated",
+        "REQ-venue-capacity-1": "outdated",
+        "REQ-crew-arrival-1": "outdated",
+        "REQ-production-runofshow-1": "outdated",
+        "REQ-budget-total-1": "outdated",
+        "REQ-fire-permit-1": "outdated",
+        "REQ-photographer-deliverables-1": "supported"
+      },
+      "statusRationale": "Every affected requirement has evidence bound to a field value that the change replaced, so each is outdated. None is missing: evidence existed. None is blocked: nothing here asserts that current evidence fails a predicate. The conflicts between current values are reported by the integrated checks, not by inventing a requirement failure from stale evidence.",
+      "impacted": {
+        "requirementIds": [
+          "REQ-venue-loading-1",
+          "REQ-venue-capacity-1",
+          "REQ-crew-arrival-1",
+          "REQ-production-runofshow-1",
+          "REQ-budget-total-1",
+          "REQ-fire-permit-1"
+        ],
+        "evidenceIds": [
+          "EV-1",
+          "EV-2",
+          "EV-3",
+          "EV-4",
+          "EV-5",
+          "EV-6"
+        ]
+      },
+      "unaffected": {
+        "requirementIds": [
+          "REQ-photographer-deliverables-1"
+        ],
+        "evidenceIds": [
+          "EV-7"
+        ]
+      },
+      "integrated": {
+        "status": "fail",
+        "failingChecks": [
+          {
+            "id": "access_vs_arrival",
+            "reason": "Loading window 06:00-07:30 ends before crew arrival 07:15 plus 45 minutes setup (needs access to 08:00)."
+          },
+          {
+            "id": "total_cost",
+            "reason": "Committed total 31,450.00 exceeds approved budget 30,000.00 by 1,450.00."
+          },
+          {
+            "id": "runofshow_vs_hardstop",
+            "reason": "Run of show ends 22:00; 30 minute margin requires 22:30 but the hard stop is 21:30."
+          }
+        ]
+      },
+      "readiness": "not_ready",
+      "decisionEligibility": {
+        "eligible": false,
+        "reasons": [
+          "mandatory_requirements_not_supported",
+          "integration_failed"
+        ],
+        "targetRevision": 2
+      },
+      "priorDecision": {
+        "id": "DEC-1",
+        "targetRevision": 1,
+        "currentnessAfterChange": "historical"
+      }
+    },
+    {
+      "id": "O3",
+      "dependsOn": "O2",
+      "proposal": {
+        "id": "CHG-BAD",
+        "baseRevision": 2,
+        "author": {
+          "kind": "model",
+          "id": "ai-adapter"
+        },
+        "claim": "Pier 9 LoFT confirmed the freight lift will be staffed at 05:30 and the occupancy limit is waived for this event.",
+        "sourceRefIds": [
+          "SRC-3"
+        ]
+      },
+      "expected": {
+        "proposalStatus": "rejected",
+        "rejectionReasons": [
+          "unsupported_confirmation",
+          "no_source_ref_for_claim",
+          "cannot_override_occupancy_limit"
+        ],
+        "projectRevisionUnchanged": true,
+        "authoritativeRecordsUnchanged": true
+      }
+    },
+    {
+      "id": "O4",
+      "dependsOn": "O2",
+      "state": "state.recovered",
+      "requirementStatus": {
+        "REQ-venue-loading-1": "supported",
+        "REQ-venue-capacity-1": "supported",
+        "REQ-crew-arrival-1": "supported",
+        "REQ-production-runofshow-1": "supported",
+        "REQ-budget-total-1": "supported",
+        "REQ-fire-permit-1": "supported",
+        "REQ-photographer-deliverables-1": "supported"
+      },
+      "integrated": {
+        "status": "pass",
+        "failingChecks": []
+      },
+      "readiness": "ready_for_review",
+      "decisionEligibility": {
+        "eligible": true,
+        "role": "project_manager",
+        "targetRevision": "actual resulting revision, not assumed N+1"
+      }
+    },
+    {
+      "id": "O5",
+      "dependsOn": "O4",
+      "trigger": {
+        "changeFields": [
+          "location.venueId"
+        ],
+        "from": "VEN-B",
+        "to": "VEN-A"
+      },
+      "expected": {
+        "priorDecisionCurrentness": "historical",
+        "decisionEligibility": {
+          "eligible": false,
+          "reasons": [
+            "revision_lineage_changed",
+            "fresh_review_required"
+          ]
+        },
+        "note": "The venue value matches an earlier state, but the revision lineage does not. The prior acceptance is not restored or reusable."
+      }
+    },
+    {
+      "id": "O6",
+      "state": "state.baseline",
+      "trigger": {
+        "expireEvidence": [
+          "EV-1"
+        ]
+      },
+      "expected": {
+        "requirementStatus": {
+          "REQ-venue-loading-1": "outdated",
+          "REQ-crew-arrival-1": "blocked"
+        },
+        "residualReasonCodes": [
+          "evidence_expired",
+          "prerequisite_not_supported"
+        ],
+        "impacted": {
+          "requirementIds": [
+            "REQ-venue-loading-1",
+            "REQ-crew-arrival-1"
+          ]
+        },
+        "readiness": "not_ready",
+        "decisionEligibility": {
+          "eligible": false,
+          "reasons": [
+            "mandatory_evidence_expired"
+          ]
+        },
+        "priorDecisionCurrentness": "historical"
+      }
+    },
+    {
+      "id": "O7",
+      "state": "state.baseline",
+      "trigger": {
+        "removeRequirement": "REQ-photographer-deliverables-1"
+      },
+      "expected": {
+        "requirementSetVersion": "incremented",
+        "priorDecisionCurrentness": "historical",
+        "decisionEligibility": {
+          "eligible": false,
+          "reasons": [
+            "requirement_set_changed",
+            "fresh_decision_required"
+          ]
+        },
+        "historyPreserved": true
+      }
+    },
+    {
+      "id": "O8",
+      "state": "state.baseline",
+      "trigger": {
+        "removeEvidence": [
+          "EV-2"
+        ],
+        "markTaskComplete": "REQ-venue-capacity-1"
+      },
+      "expected": {
+        "requirementStatus": {
+          "REQ-venue-capacity-1": "missing"
+        },
+        "readiness": "not_ready",
+        "residuals": [
+          {
+            "requirementId": "REQ-venue-capacity-1",
+            "reason": "mandatory_evidence_missing"
+          }
+        ]
+      }
+    }
+  ],
+  "evidenceBindings": [
+    {
+      "id": "EV-1",
+      "requirementId": "REQ-venue-loading-1",
+      "sourceRefId": "SRC-2",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.loadingWindow": "05:00-12:00"
+      },
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-2",
+      "requirementId": "REQ-venue-capacity-1",
+      "sourceRefId": "SRC-2",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.capacity": 150
+      },
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-3",
+      "requirementId": "REQ-crew-arrival-1",
+      "sourceRefId": "SRC-5",
+      "boundFieldVersions": {
+        "crew.arrivalTime": "07:00",
+        "location.loadingWindow": "05:00-12:00"
+      },
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-4",
+      "requirementId": "REQ-production-runofshow-1",
+      "sourceRefId": "SRC-2",
+      "boundFieldVersions": {
+        "production.runOfShowEnd": "22:00",
+        "location.hardStop": "23:00"
+      },
+      "expiresAt": "2027-03-07T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-5",
+      "requirementId": "REQ-budget-total-1",
+      "sourceRefId": "SRC-1",
+      "boundFieldVersions": {
+        "budget.committedTotal": 2910000
+      },
+      "expiresAt": "2027-03-01T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-6",
+      "requirementId": "REQ-fire-permit-1",
+      "sourceRefId": "SRC-2",
+      "boundFieldVersions": {
+        "location.venueId": "VEN-A",
+        "location.fireAttestation": "reviewed"
+      },
+      "expiresAt": "2027-03-10T00:00:00Z",
+      "reviewDisposition": "accepted"
+    },
+    {
+      "id": "EV-7",
+      "requirementId": "REQ-photographer-deliverables-1",
+      "sourceRefId": "SRC-4",
+      "boundFieldVersions": {
+        "photographer.deliverables": {
+          "editedImages": 120,
+          "deliveryDays": 10
+        }
+      },
+      "expiresAt": "2027-03-12T00:00:00Z",
+      "reviewDisposition": "accepted"
+    }
+  ],
+  "invariants": [
+    "The venue-change impacted set must equal O2.impacted and must not include REQ-photographer-deliverables-1.",
+    "EV-7 must remain supported across O2 and O4. A blanket reset is a failure.",
+    "No output may report accepted without a project_manager decision record.",
+    "A rejected or failed action leaves the project revision unchanged.",
+    "Reverting a field never restores a prior acceptance.",
+    "Duplicate command IDs return the original result and append nothing."
+  ]
+}

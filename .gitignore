@@ -1,0 +1,24 @@
+.DS_Store
+Thumbs.db
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Local tooling and editors
+.venv/
+__pycache__/
+.cursor/
+.vscode/
+.idea/
