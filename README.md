@@ -22,6 +22,8 @@ A decision is current only while the revision and evidence it references remain 
 
 The model extracts a structured brief from pasted text and drafts recovery options. Every extracted claim carries a source reference. Output that fails schema validation, cites a source that is not present, or asserts a confirmation nobody issued is rejected as a proposal and cannot alter the record. Instructions embedded in uploaded material are treated as content, never as authority.
 
+Source review works the same way. Items arrive from named channels with a locator and a content digest; reviewing one records a concern, dismissal, deferral, clarification or resolution without touching assessed project facts. A concern is a separate record from a plan change, and the two are never merged.
+
 ## Scope
 
 OnCueX provides:
@@ -30,6 +32,7 @@ OnCueX provides:
 - Deterministic readiness with named residuals, alongside integrated checks reported separately.
 - Reviewed AI extraction and recovery drafting.
 - A revision-bound project-manager decision with retained history.
+- Source review that records a reviewer's disposition without mutating the plan.
 - Reloadable, exportable records, and a working brief and readiness report rendered from reviewed state.
 
 OnCueX does not provide:
@@ -41,22 +44,20 @@ OnCueX does not provide:
 
 All people, venues, vendors and prices are fictional. No customer data, contracts or payment details are used.
 
-## Specification
+## Two implementations
 
-| Document | Contents |
-| --- | --- |
-| [docs/domain-model.md](docs/domain-model.md) | Records, identifiers, state transitions, currentness and write semantics. |
-| [docs/readiness-rules.md](docs/readiness-rules.md) | Requirement predicates, integrated checks and impact computation. |
-| [docs/ai-boundary.md](docs/ai-boundary.md) | Extraction and drafting contract, validation and rejection reasons. |
-| [docs/verification.md](docs/verification.md) | The twenty-four behavioral checks the implementation must satisfy. |
-| [fixtures/scenario.json](fixtures/scenario.json) | Typed field schema, project, requirements, sources, evidence and the three states. |
-| [fixtures/expected-impact.json](fixtures/expected-impact.json) | Revision model, event timeline, expected outcomes and the invariants they imply. |
-| [fixtures/acceptance-cases.json](fixtures/acceptance-cases.json) | The verification checks in machine-readable form. |
-| [submission/overview.md](submission/overview.md) | One-page description of the problem, the mechanism and the limits. |
+The repository holds the same contract twice, deliberately.
 
-## Reference implementation
+| Path | Form | Role |
+| --- | --- | --- |
+| `oncuex/`, `tools/` | Python, headless | **Normative reference.** Every rule in `docs/` is executed here. Readiness can be re-derived from the record with no model in the loop. |
+| `app/` | React + TypeScript, on Enter | **Shipped product.** A port of the same engine behind the operator interface. |
 
-`oncuex/` is a headless engine covering the contract: typed schema validation, pure evaluation of readiness and selective impact, an append-only event log with two independent counters, and revision-bound decisions. `oncuex/schema.py` is the single declaration of every bindable path and record shape; the engine and the fixture validator both import it. It has no UI and no platform adapter.
+The Python reference decides what is correct. The app is held to it, and the parity checks that prove this are named in [docs/verification.md](docs/verification.md#app-parity).
+
+`oncuex/schema.py` and `app/src/oncuex/schema.ts` are each the single declaration of every bindable path and record shape for their side; the engine and the fixture validator import it rather than repeating it.
+
+## Run the reference
 
 ```sh
 python3 tools/validate_fixtures.py   # schema, bindings, evidence, oracle coherence
@@ -67,7 +68,50 @@ python3 tools/reference_path.py      # baseline -> change -> recovery -> accepta
 ```
 
 `tools/reference_path.py` exercises the end-to-end path and asserts that a decision stays current through an immediate readback and a reload, that the venue change reopens exactly six requirements while the photographer deliverable stays supported, that a retried command appends nothing, and that a rejected write leaves the exported record byte-identical.
+
+## Run the app
+
+Built with [Enter](https://enter.pro). Requires Node 18+ and pnpm.
+
+```sh
+cd app
+pnpm install
+pnpm dev          # http://localhost:8080
+pnpm check        # lint + typecheck
+pnpm build:prod   # production build
+```
+
+Two harnesses run from the same entry, `app/src/oncuex/verification-entry.ts`:
+
+- `runSelfChecks()` — the contract behaviours, including the parity checks below.
+- `runSourceReviewChecks()` — the review workflow, including that accepting a concern leaves the exported project byte-identical.
+
+The operator interface has five tabs — Overview, Checklist, Itinerary, Budget, Partners — with sign-off in the header, an activity timeline drawer and a settings dialog.
+
+The AI path calls a hosted Supabase function whose URL and anon key are declared in `src/integrations/supabase/client.ts`; the model credential is held server-side, not in this repository. If the call fails the action reports the error and nothing else is affected — the plan, the record and every deterministic check continue to work without it. The anon key is public by design; row-level security is the boundary, and the function should be reviewed before any non-fictional deployment.
+
+## App parity
+
+The app is a port, so the two engine behaviours most easily lost in a port are pinned by name in the app's own harness. Each is verified load-bearing by reverting the guard and confirming the specific check fails.
+
+| Behaviour | Why it matters | Check |
+| --- | --- | --- |
+| A prerequisite conflict is prepended, not substituted | The conflict explains why a requirement cannot be satisfied; the evidence gap is what still needs work once it is resolved. Reporting only the conflict discards a true secondary finding. | *A conflict and an evidence gap are reported together, conflict first* |
+| Readiness totals count each requirement once | A requirement that is both conflicted and missing evidence is one blocked requirement. Counting it twice overstates the work. | *Readiness totals count each blocking requirement once* |
+
+## Specification
+
+| Document | Contents |
+| --- | --- |
+| [docs/domain-model.md](docs/domain-model.md) | Records, identifiers, state transitions, currentness and write semantics. |
+| [docs/readiness-rules.md](docs/readiness-rules.md) | Requirement predicates, integrated checks and impact computation. |
+| [docs/ai-boundary.md](docs/ai-boundary.md) | Extraction and drafting contract, validation and rejection reasons. |
+| [docs/verification.md](docs/verification.md) | The twenty-four behavioural checks, and how the app is held to them. |
+| [fixtures/scenario.json](fixtures/scenario.json) | Typed field schema, project, requirements, sources, evidence and the three states. |
+| [fixtures/expected-impact.json](fixtures/expected-impact.json) | Revision model, event timeline, expected outcomes and the invariants they imply. |
+| [fixtures/acceptance-cases.json](fixtures/acceptance-cases.json) | The verification checks in machine-readable form. |
 | [tools/validate_fixtures.py](tools/validate_fixtures.py) | Mechanical enforcement of the schema, binding, evidence and oracle rules. |
+| [submission/overview.md](submission/overview.md) | One-page description of the problem, the mechanism and the limits. |
 
 ## License
 

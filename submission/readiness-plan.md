@@ -29,7 +29,7 @@ Line 70 is an orphaned table row appended after a paragraph, breaking the Refere
 
 ```
 ...byte-identical.
-| [tools/validate_fixtures.py](tools/validate_fixtures.py) | Mechanical enforcement... |
+| [tools/validate_fixtures.py](../tools/validate_fixtures.py) | Mechanical enforcement... |
 ```
 
 Fix: delete line 70 or fold it into the Specification table.

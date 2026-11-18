@@ -104,3 +104,31 @@ These hold absolutely:
 ## Machine-readable form
 
 [../fixtures/acceptance-cases.json](../fixtures/acceptance-cases.json) carries V1–V24 with identifiers, actions, expected results and the oracle case each references.
+
+## App parity
+
+The twenty-four checks above are executed by the Python reference under `tools/`. The app in `app/` reimplements the same engine in TypeScript and is held to the same contract, verified by two harnesses entered through `app/src/oncuex/verification-entry.ts`:
+
+| Harness | Scope | Count |
+| --- | --- | --- |
+| `runSelfChecks()` | Contract behaviour: schema, readiness, currentness, archive, export, command invariants, and the parity checks below | 33 |
+| `runSourceReviewChecks()` | The review workflow: a concern is recorded without altering assessed project facts, and review data survives reload and export | 16 |
+
+The Python reference is normative. When the two disagree, the reference is right and the app is corrected.
+
+Two behaviours are most easily lost when porting the engine, so each is pinned by name in the app's harness. Both are verified load-bearing: reverting the guard makes that specific check fail while the rest continue to pass.
+
+| Behaviour | Consequence if lost | App check |
+| --- | --- | --- |
+| A prerequisite conflict is prepended, not substituted | The requirement reports only the conflict, discarding the evidence gap that still needs work once the conflict is resolved | *A conflict and an evidence gap are reported together, conflict first* |
+| Readiness totals count each blocking requirement once, by primary status | A requirement that is both conflicted and missing evidence is counted twice, overstating the remaining work | *Readiness totals count each blocking requirement once* |
+
+Run them from `app/`:
+
+```sh
+pnpm exec tsc --noEmit    # types
+pnpm lint                 # lint
+pnpm build:prod           # production build
+```
+
+The harnesses are pure functions over the engine and run under any TypeScript bundler; they are not wired to a test runner in this repository.
