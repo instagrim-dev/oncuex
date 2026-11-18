@@ -181,14 +181,38 @@ def evaluate(
         if rid in cycle_paths:
             continue
         conflicts = prerequisite_conflicts(req, by_id)
-        if conflicts:
-            statuses[rid] = "blocked"
-            residuals[rid] = conflicts[:1]
+        if not conflicts:
+            continue
+        # A conflict explains why the requirement cannot currently be satisfied.
+        # The direct evidence finding says what will still need attention once the
+        # conflict is resolved, so both are reported. The conflict leads: it is the
+        # blocker, and the evidence residual is the remaining work behind it.
+        secondary = [
+            residual
+            for residual in residuals[rid]
+            if residual.get("code") != "prerequisite_conflict"
+        ]
+        statuses[rid] = "blocked"
+        residuals[rid] = conflicts[:1] + secondary
 
     integrated = integrated_checks(snapshot, requirements, statuses)
     ready = all(
         statuses[r["id"]] == "supported" for r in requirements if r["blocking"]
     ) and integrated["status"] == "pass"
+
+    # Readiness totals count each blocking requirement once, by its primary
+    # status. A requirement that is both blocked by a conflict and missing
+    # evidence is one blocked requirement, not one of each.
+    counts = {
+        "blocking": sum(1 for r in requirements if r["blocking"]),
+        "supported": 0,
+        "blocked": 0,
+        "outdated": 0,
+        "missing": 0,
+    }
+    for rid, status in statuses.items():
+        if by_id[rid]["blocking"] and status in counts:
+            counts[status] += 1
 
     reason_codes: list[str] = []
     if any(statuses[r["id"]] == "outdated" for r in requirements if r["blocking"]):
@@ -213,6 +237,7 @@ def evaluate(
         ],
         "integrated": integrated,
         "readiness": "ready_for_review" if ready else "not_ready",
+        "counts": counts,
         "residualReasonCodes": reason_codes,
     }
     if impact is not None:

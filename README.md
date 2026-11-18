@@ -48,7 +48,7 @@ All people, venues, vendors and prices are fictional. No customer data, contract
 | [docs/domain-model.md](docs/domain-model.md) | Records, identifiers, state transitions, currentness and write semantics. |
 | [docs/readiness-rules.md](docs/readiness-rules.md) | Requirement predicates, integrated checks and impact computation. |
 | [docs/ai-boundary.md](docs/ai-boundary.md) | Extraction and drafting contract, validation and rejection reasons. |
-| [docs/verification.md](docs/verification.md) | The twenty-three behavioral checks the implementation must satisfy. |
+| [docs/verification.md](docs/verification.md) | The twenty-four behavioral checks the implementation must satisfy. |
 | [fixtures/scenario.json](fixtures/scenario.json) | Typed field schema, project, requirements, sources, evidence and the three states. |
 | [fixtures/expected-impact.json](fixtures/expected-impact.json) | Revision model, event timeline, expected outcomes and the invariants they imply. |
 | [fixtures/acceptance-cases.json](fixtures/acceptance-cases.json) | The verification checks in machine-readable form. |

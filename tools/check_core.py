@@ -27,7 +27,7 @@ sys.path.insert(0, ROOT)
 
 from oncuex import CommandError, Store  # noqa: E402
 from oncuex.engine import evaluate, impact_of_change, impact_of_expiry  # noqa: E402
-from oncuex.schema import FIELD_SCHEMA  # noqa: E402
+from oncuex.schema import FIELD_SCHEMA, digest  # noqa: E402
 
 SCENARIO = os.path.join(ROOT, "fixtures", "scenario.json")
 ORACLE = os.path.join(ROOT, "fixtures", "expected-impact.json")
@@ -588,6 +588,83 @@ def main() -> int:
     check("the unmodified scenario reports no prerequisite conflict",
           not any(r["code"] == "prerequisite_conflict"
                   for req in baseline["requirements"] for r in req["residuals"]))
+
+    # ------------------------------------------------------------ conflict and evidence
+    # A conflict and a direct evidence finding are different facts and both belong
+    # on the record. The conflict leads, because it explains why the requirement
+    # cannot be satisfied; the evidence finding says what still needs attention
+    # once the conflict is resolved.
+    conflict_residuals = next(
+        r for r in conflicted["requirements"]
+        if r["requirementId"] == "REQ-combined-capacity-1"
+    )["residuals"]
+    check("a requirement blocked by conflict also reports its evidence gap",
+          [r["code"] for r in conflict_residuals]
+          == ["prerequisite_conflict", "mandatory_evidence_missing"],
+          str([r["code"] for r in conflict_residuals]))
+    check("the conflict is the primary residual",
+          conflict_residuals[0]["code"] == "prerequisite_conflict")
+    check("the requirement status stays blocked",
+          conflict_status["REQ-combined-capacity-1"] == "blocked")
+
+    # one requirement, counted once, by its primary status
+    check("readiness totals count each blocking requirement once",
+          conflicted.get("counts", {}).get("blocking") == len(conflict_requirements),
+          str(conflicted.get("counts")))
+    totals = conflicted.get("counts", {})
+    check("the per-status totals sum to the blocking requirements",
+          totals.get("supported", 0) + totals.get("blocked", 0)
+          + totals.get("outdated", 0) + totals.get("missing", 0)
+          == totals.get("blocking"),
+          str(totals))
+
+    # Resolving the conflict leaves the evidence gap. The dependent gains no
+    # evidence, so it must remain unsupported with the evidence residual intact.
+    resolved_requirements = copy.deepcopy(conflict_requirements)
+    resolved_by_id = {r["id"]: r for r in resolved_requirements}
+    resolved_by_id["REQ-capped-capacity-1"]["expectedValues"] = {
+        "field": "location.capacity", "minimum": 130, "unit": "people"}
+    resolved = evaluate(project_for(scenario, "baseline", 8), resolved_requirements, evidence)
+    resolved_residuals = next(
+        r for r in resolved["requirements"]
+        if r["requirementId"] == "REQ-combined-capacity-1"
+    )["residuals"]
+    check("resolving the conflict clears the conflict residual",
+          all(r["code"] != "prerequisite_conflict" for r in resolved_residuals),
+          str([r["code"] for r in resolved_residuals]))
+    check("resolving the conflict leaves the evidence residual",
+          any(r["code"] == "mandatory_evidence_missing" for r in resolved_residuals),
+          str([r["code"] for r in resolved_residuals]))
+    check("the dependent is still not supported after the conflict resolves",
+          statuses(resolved)["REQ-combined-capacity-1"] != "supported",
+          statuses(resolved)["REQ-combined-capacity-1"])
+
+    # Supplying evidence alone must not clear a conflict.
+    evidenced = [copy.deepcopy(e) for e in evidence]
+    link = next((e for e in evidenced
+                 if e["requirementId"] == "REQ-venue-capacity-1"), None)
+    supporting = copy.deepcopy(link)
+    supporting.update({
+        "id": "EV-90",
+        "requirementId": "REQ-combined-capacity-1",
+        "boundFieldVersions": {"location.capacity": 150},
+    })
+    supporting["contentDigest"] = digest({
+        "sourceRefIds": supporting["sourceRefIds"],
+        "sourceExcerpt": supporting["sourceExcerpt"],
+    })
+    evidenced.append(supporting)
+    still_conflicted = evaluate(project_for(scenario, "baseline", 8),
+                                conflict_requirements, evidenced)
+    other_residuals = next(
+        r for r in still_conflicted["requirements"]
+        if r["requirementId"] == "REQ-combined-capacity-1"
+    )["residuals"]
+    check("supplying evidence alone does not clear the conflict",
+          other_residuals[0]["code"] == "prerequisite_conflict",
+          str([r["code"] for r in other_residuals]))
+    check("the conflict still leads once its evidence gap is filled",
+          statuses(still_conflicted)["REQ-combined-capacity-1"] == "blocked")
 
     # ------------------------------------------------------------ unaffected stability
     before_photo = next(r for r in baseline["requirements"]

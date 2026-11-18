@@ -51,6 +51,19 @@ Two prerequisites conflict when their declared constraints on the same field adm
 
 Time-window constraints are not compared: they constrain when work happens rather than the value a field holds, so treating disjoint windows as a contradiction would assert a rule the contract does not state.
 
+### Conflict and evidence are reported together
+
+A conflict and a direct evidence finding are different facts, and both belong on the record:
+
+- **`prerequisite_conflict` is primary.** It explains why the requirement cannot be satisfied at all, so it leads the residual list.
+- **The evidence finding is secondary.** `mandatory_evidence_missing`, `evidence_expired`, `bound_field_changed` or `predicate_false` states what will still need attention once the conflict is resolved.
+
+The requirement's status is `blocked`. Resolving the conflict does not imply the requirement is satisfiable: the evidence residual remains until the gap is filled. Supplying evidence does not clear the conflict. Neither condition substitutes for the other.
+
+### Readiness totals
+
+Counts are per blocking requirement, using its primary status. A requirement that is both blocked by a conflict and missing evidence is **one** blocked requirement, not one of each. `supported + blocked + outdated + missing` equals `blocking`; totals never exceed the requirement count.
+
 ## Integrated checks
 
 Requirement status is necessary and not sufficient. The six checks are evaluated against current state, independently of evidence currency. A requirement can be `outdated` while its check also fails; both are reported.
@@ -125,6 +138,7 @@ An exception is an explicit scope decision recorded with a reason, an owner and 
     "checks": [{ "id": "access_vs_arrival", "status": "fail", "reason": "..." }]
   },
   "readiness": "not_ready",
+  "counts": { "blocking": 7, "supported": 1, "blocked": 6, "outdated": 0, "missing": 0 },
   "impact": {
     "impacted": { "requirementIds": [], "evidenceIds": [] },
     "unaffected": { "requirementIds": [], "evidenceIds": [] }

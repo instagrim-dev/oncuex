@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.1",
-  "casesVersion": "2.1.0",
+  "casesVersion": "2.2.0",
   "provenance": {
     "kind": "synthetic",
-    "note": "Behavioral checks V1-V23. Each case states an action and the expected observable result."
+    "note": "Behavioral checks V1-V24. Each case states an action and the expected observable result."
   },
   "cases": [
     {
@@ -63,19 +63,53 @@
     {
       "id": "V4",
       "area": "readiness",
-      "action": "Introduce a cycle in prerequisiteIds, or two prerequisites that cannot both hold.",
+      "action": "Introduce a cycle in prerequisiteIds, or two prerequisites that cannot both hold. Separately, give the dependent no evidence of its own.",
       "expected": {
         "requirementStatus": "blocked",
-        "residuals": [
+        "residualsOrdered": [
           {
-            "code": "prerequisite_cycle",
-            "path": "reported"
+            "code": "prerequisite_conflict",
+            "primary": true
+          },
+          {
+            "code": "mandatory_evidence_missing",
+            "primary": false
           }
-        ]
+        ],
+        "countsOnce": true,
+        "note": "The conflict leads because it explains why the requirement cannot be satisfied. The evidence residual states what will still need attention once the conflict is resolved. Neither condition clears the other, and the requirement is counted once under its primary status.",
+        "cycleAlternative": {
+          "code": "prerequisite_cycle",
+          "path": "reported"
+        }
       }
     },
     {
       "id": "V5",
+      "area": "readiness",
+      "action": "Give a requirement both conflicting prerequisites and no admissible evidence, then resolve only the conflict, then supply only the evidence.",
+      "expected": {
+        "statusWhenBoth": "blocked",
+        "residualOrder": [
+          "prerequisite_conflict",
+          "mandatory_evidence_missing"
+        ],
+        "countedOnce": true,
+        "afterResolvingConflict": {
+          "conflictResidual": "cleared",
+          "evidenceResidual": "remains",
+          "status": "not supported"
+        },
+        "afterSupplyingEvidence": {
+          "evidenceResidual": "cleared",
+          "conflictLeads": true,
+          "status": "blocked"
+        },
+        "note": "Neither condition clears the other. Totals count the requirement once under its primary status."
+      }
+    },
+    {
+      "id": "V6",
       "area": "change",
       "action": "Adopt the change from Foundry Hall to Pier 9 Loft at assessment revision 8.",
       "expected": {
@@ -87,7 +121,7 @@
       "oracle": "O2"
     },
     {
-      "id": "V6",
+      "id": "V7",
       "area": "change",
       "action": "Accept at assessment revision 8, then adopt the venue change and read the decision.",
       "expected": {
@@ -102,7 +136,7 @@
       "oracle": "O2"
     },
     {
-      "id": "V7",
+      "id": "V8",
       "area": "change",
       "action": "After V6, revert the venue to Foundry Hall.",
       "expected": {
@@ -118,7 +152,7 @@
       "oracle": "O5"
     },
     {
-      "id": "V8",
+      "id": "V9",
       "area": "change",
       "action": "Remove or add a requirement so requirementSetVersion increments.",
       "expected": {
@@ -135,7 +169,7 @@
       "oracle": "O7"
     },
     {
-      "id": "V9",
+      "id": "V10",
       "area": "change",
       "action": "Expire EV-1, the venue loading evidence.",
       "expected": {
@@ -152,7 +186,7 @@
       "oracle": "O6"
     },
     {
-      "id": "V10",
+      "id": "V11",
       "area": "writes",
       "action": "Submit a command with expectedAssessmentRevision one behind current.",
       "expected": {
@@ -162,7 +196,7 @@
       }
     },
     {
-      "id": "V11",
+      "id": "V12",
       "area": "writes",
       "action": "Submit the same decision twice with the same commandId.",
       "expected": {
@@ -171,7 +205,7 @@
       }
     },
     {
-      "id": "V12",
+      "id": "V13",
       "area": "writes",
       "action": "Trigger a validation failure, a role failure and a revision conflict in turn.",
       "expected": {
@@ -182,7 +216,7 @@
       }
     },
     {
-      "id": "V13",
+      "id": "V14",
       "area": "writes",
       "action": "Submit a change naming location.inventedField, then a change naming assessmentRevision.",
       "expected": {
@@ -198,7 +232,7 @@
       }
     },
     {
-      "id": "V14",
+      "id": "V15",
       "area": "writes",
       "action": "Attempt acceptance as a contributor, then as the project manager.",
       "expected": {
@@ -218,7 +252,7 @@
       }
     },
     {
-      "id": "V15",
+      "id": "V16",
       "area": "ai",
       "action": "Feed output that is not valid JSON, then output missing a required field.",
       "expected": {
@@ -228,7 +262,7 @@
       }
     },
     {
-      "id": "V16",
+      "id": "V17",
       "area": "ai",
       "action": "Request a recovery plan and receive an asserted vendor confirmation that no source supports.",
       "expected": {
@@ -244,7 +278,7 @@
       "oracle": "O3"
     },
     {
-      "id": "V17",
+      "id": "V18",
       "area": "ai",
       "action": "Include text instructing the reader to mark requirements supported, record an acceptance and raise the budget.",
       "expected": {
@@ -256,7 +290,7 @@
       }
     },
     {
-      "id": "V18",
+      "id": "V19",
       "area": "persistence",
       "action": "Hard reload in a fresh session.",
       "expected": {
@@ -271,7 +305,7 @@
       "oracle": "O10"
     },
     {
-      "id": "V19",
+      "id": "V20",
       "area": "persistence",
       "action": "Compare the exported JSON, the working brief and the readiness report against the current snapshot.",
       "expected": {
@@ -282,7 +316,7 @@
       }
     },
     {
-      "id": "V20",
+      "id": "V21",
       "area": "decision",
       "action": "Record a decision at assessment revision 8, then read it without any intervening change.",
       "expected": {
@@ -294,7 +328,7 @@
       "oracle": "O9"
     },
     {
-      "id": "V21",
+      "id": "V22",
       "area": "decision",
       "action": "Record a decision, confirm it is current, then advance time past the expiry of one supporting evidence record.",
       "expected": {
@@ -305,7 +339,7 @@
       }
     },
     {
-      "id": "V22",
+      "id": "V23",
       "area": "decision",
       "action": "Reload immediately after V19.",
       "expected": {
@@ -316,7 +350,7 @@
       "oracle": "O10"
     },
     {
-      "id": "V23",
+      "id": "V24",
       "area": "decision",
       "action": "Record a second decision at the recovered assessment revision 16.",
       "expected": {

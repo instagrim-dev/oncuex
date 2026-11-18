@@ -84,5 +84,5 @@ The scenario ships with a validator that enforces the contract mechanically:
 | --- | --- |
 | [scenario.json](scenario.json) | Typed field schema, project, requirements, sources, evidence records and the three states. |
 | [expected-impact.json](expected-impact.json) | Revision model, event timeline, expected outcomes O1–O11, and the invariants they imply. |
-| [acceptance-cases.json](acceptance-cases.json) | V1–V23 with actions and expected observables. |
+| [acceptance-cases.json](acceptance-cases.json) | V1–V24 with actions and expected observables. |
 | [../tools/validate_fixtures.py](../tools/validate_fixtures.py) | Mechanical enforcement of every rule on this page. |

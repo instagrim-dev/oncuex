@@ -280,6 +280,8 @@ An export carries `exportVersion: "2.0"` and exactly these sections: `project`, 
 
 A prerequisite cycle is reported as `prerequisite_cycle`. A separate condition is a pair of prerequisites whose declared constraints admit no common value: disjoint numeric ranges on the same field, or different exact values for it. The dependent reports `blocked` with `prerequisite_conflict`, naming the field, both prerequisite ids and their constraints. Precedence ambiguity never defaults to `supported`. Time-window prerequisites describe when work happens, not which value a field holds, so they are not compared.
 
+A conflict and a direct evidence finding are reported together, conflict first. The conflict explains why the requirement cannot be satisfied; the evidence residual states what will still need attention once it is resolved. Neither clears the other, and readiness totals count each requirement once under its primary status.
+
 ## Impact computation
 
 A requirement declares `fieldBindings`; evidence declares `boundFieldVersions`. A change computes the transitive dependent set over both `fieldBindings` and `prerequisiteIds`, and returns `impacted` and `unaffected` requirement and evidence IDs.
