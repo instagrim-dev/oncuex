@@ -136,16 +136,61 @@ def h2(slide, s: str, y: float = 1.0, size: float = 32, w: float = 11.6):
     return text(slide, s, ML, y, w, 1.5, size=size, color=INK, line=1.14)
 
 
-def footer(slide, n: int):
+_counter = {"n": 0, "total": 0}
+
+
+def footer(slide):
+    """Number slides in the order they are built."""
+    _counter["n"] += 1
     hline(slide, ML, RULE_Y, CW)
     text(slide, "OnCueX", ML, FOOT_Y, 5, 0.22, size=8, color=INK_FAINT,
          font=MONO, spacing_pt=120)
-    text(slide, f"{n} / 14", SW - ML - 1.6, FOOT_Y, 1.6, 0.22, size=8,
-         color=INK_FAINT, font=MONO, spacing_pt=120, align=PP_ALIGN.RIGHT)
+    text(slide, f"{_counter['n']} / {_counter['total']}", SW - ML - 1.6, FOOT_Y,
+         1.6, 0.22, size=8, color=INK_FAINT, font=MONO, spacing_pt=120,
+         align=PP_ALIGN.RIGHT)
 
 
 def notes(slide, s: str):
     slide.notes_slide.notes_text_frame.text = s
+
+
+SHOTS = os.path.join(ROOT, "submission", "screenshots")
+
+
+def shot(slide, name: str, x: float, y: float, w: float, *, caption: str = "",
+         frame: bool = True, bottom: float = 6.52):
+    """Place a screenshot, shrinking it to stay above the footer rule.
+
+    16:9 captures at full column width are taller than the space above the
+    footer, so the width is reduced until the image and its caption fit.
+    """
+    path = os.path.join(SHOTS, name)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"screenshot missing: {path}")
+    from PIL import Image
+
+    with Image.open(path) as im:
+        iw, ih = im.size
+
+    caption_h = 0.34 if caption else 0.0
+    max_h = bottom - y - caption_h
+    h = w * ih / iw
+    if h > max_h:
+        h = max_h
+        w = h * iw / ih
+
+    if frame:
+        edge = slide.shapes.add_shape(1, Inches(x - 0.012), Inches(y - 0.012),
+                                      Inches(w + 0.024), Inches(h + 0.024))
+        edge.fill.background()
+        edge.line.color.rgb = RULE
+        edge.line.width = Pt(0.75)
+        edge.shadow.inherit = False
+
+    slide.shapes.add_picture(path, Inches(x), Inches(y), Inches(w), Inches(h))
+    if caption:
+        text(slide, caption, x, y + h + 0.09, w, 0.24, size=9, color=INK_FAINT, italic=True)
+    return w, y + h + caption_h
 
 
 def table(slide, rows: list[tuple[str, str]], y: float, *, col1: float = 3.9,
@@ -179,6 +224,7 @@ def build() -> str:
     prs = Presentation()
     prs.slide_width = Inches(SW)
     prs.slide_height = Inches(SH)
+    _counter["total"] = 16
 
     # ---------------------------------------------------------------- 1 title
     s = slide_blank(prs); bg(s)
@@ -189,7 +235,7 @@ def build() -> str:
          "An event launch tool that keeps a sign-off tied to the evidence behind it\n"
          "— and tells you the moment that evidence moves.",
          ML, 4.42, 9.6, 1.1, size=17, color=INK_SOFT, line=1.42)
-    footer(s, 1)
+    footer(s)
     notes(s, "One sentence to open: this is about the difference between work being "
              "complete and the plan being supportable. Everything else follows from that.")
 
@@ -211,7 +257,7 @@ def build() -> str:
             "don't. The approval granted before the change still looks current —\n"
             "and nobody can say which parts are still true.",
          7.0, 4.18, 5.6, 1.5, size=12.5, color=INK_SOFT, line=1.42)
-    footer(s, 2)
+    footer(s)
     notes(s, "The second one is what the product exists for. The first is a checklist "
              "problem; the second is an integrity problem, and no checklist catches it.")
 
@@ -237,7 +283,7 @@ def build() -> str:
          ML, 4.92, 10.4, 0.9, size=13.5, color=INK_SOFT, line=1.42)
     text(s, "All people, venues and prices are fictional.", ML, 5.92, 8, 0.3,
          size=11, color=INK_FAINT, italic=True)
-    footer(s, 3)
+    footer(s)
     notes(s, "Guests and budget are fixed on purpose: the change must not be absorbable "
              "by quietly adjusting scope.")
 
@@ -256,7 +302,7 @@ def build() -> str:
     table(s, rows, 2.42, col1=3.55, size=12, head=("CHECK", "THE CONFLICTING VALUES"))
     text(s, "The set is always six. A failure names the values that disagree — never a percentage.",
          ML, 6.28, 11.5, 0.3, size=11, color=INK_FAINT, italic=True)
-    footer(s, 4)
+    footer(s)
     notes(s, "This is the slide that earns trust: every line is a specific pair of numbers "
              "that cannot both be true. No scores, no confidence.")
 
@@ -283,7 +329,7 @@ def build() -> str:
     hline(s, ML, 5.06, CW)
     text(s, "A green badge can never impersonate a person.",
          ML + 0.05, 5.3, 10, 0.4, size=17, color=ACCENT, italic=True)
-    footer(s, 5)
+    footer(s)
     notes(s, "If a judge remembers one thing, it should be this sentence. Readiness is "
              "arithmetic; approval is a signature.")
 
@@ -304,72 +350,96 @@ def build() -> str:
          ML, 5.16, 10.4, 0.8, size=13.5, color=INK_SOFT, line=1.42)
     text(s, "Earlier versions bound decisions to a single revision and staled every approval on write.",
          ML, 6.06, 11, 0.3, size=11, color=INK_FAINT, italic=True)
-    footer(s, 6)
+    footer(s)
     notes(s, "This was the first defect found in external review. It is worth naming "
              "openly — it shows the review was real.")
 
     # ---------------------------------------------------------------- 7 impact
     s = slide_blank(prs); bg(s)
     eyebrow(s, "What survives the change")
-    h2(s, "Impact comes from declared bindings, not a diff.")
-    text(s, "Each requirement declares the fields it depends on. Each evidence record\n"
-            "records the values it was bound to. A change walks those declarations,\n"
-            "then closes over the prerequisite graph.",
-         ML, 2.26, 10.6, 1.2, size=13.5, color=INK_SOFT, line=1.42)
-
-    card(s, ML, 3.72, 5.86, 1.72, tint=RGBColor(0xFB, 0xF7, 0xF6), edge=ACCENT, edge_w=1.6)
-    text(s, "6 REQUIREMENTS · 6 RECORDS", ML + 0.28, 3.9, 5.2, 0.24, size=8.5,
-         color=INK_FAINT, font=MONO, spacing_pt=110)
-    text(s, "Work to revisit", ML + 0.28, 4.18, 5.2, 0.3, size=14.5, color=INK, bold=True)
-    text(s, "Loading, capacity, crew arrival, run of show, budget, fire attestation.",
-         ML + 0.28, 4.55, 5.3, 0.7, size=11.5, color=INK_SOFT, line=1.4)
-
-    card(s, 6.92, 3.72, 5.86, 1.72, tint=RGBColor(0xF6, 0xFA, 0xF7), edge=GOOD, edge_w=1.6)
-    text(s, "1 REQUIREMENT · 1 RECORD", 7.2, 3.9, 5.2, 0.24, size=8.5,
-         color=INK_FAINT, font=MONO, spacing_pt=110)
-    text(s, "Keep as it is", 7.2, 4.18, 5.2, 0.3, size=14.5, color=INK, bold=True)
-    text(s, "Photographer delivers 120 edited images within 10 days.\n"
-            "Binds to no venue field.",
-         7.2, 4.55, 5.3, 0.7, size=11.5, color=INK_SOFT, line=1.4)
-
-    text(s, "Marking the photographer outdated is a defect, and a test fails if it happens.",
-         ML, 5.72, 11.4, 0.3, size=11, color=INK_FAINT, italic=True)
-    footer(s, 7)
-    notes(s, "The right-hand card is the proof. A blanket reset would be easier to build "
-             "and would be wrong; the test that catches it is the interesting part.")
+    h2(s, "Impact comes from declared bindings, not a diff.", size=28)
+    text(s, "Each requirement declares the fields it depends on. A change walks those\n"
+            "declarations, then closes over the prerequisite graph.",
+         ML, 2.14, 10.4, 0.8, size=12.5, color=INK_SOFT, line=1.4)
+    shot(s, "shot-impact.png", ML, 2.92, 8.4,
+         caption="After the venue move — six requirements to revisit, photographer untouched")
+    card(s, 9.42, 2.92, 3.3, 1.5, tint=RGBColor(0xFB, 0xF7, 0xF6), edge=ACCENT, edge_w=1.5)
+    text(s, "6 REVISIT", 9.62, 3.06, 2.9, 0.22, size=8.5, color=INK_FAINT, font=MONO, spacing_pt=100)
+    text(s, "Loading, capacity,\ncrew, run of show,\nbudget, attestation",
+         9.62, 3.3, 2.95, 0.9, size=10.5, color=INK_SOFT, line=1.34)
+    card(s, 9.42, 4.55, 3.3, 1.28, tint=RGBColor(0xF6, 0xFA, 0xF7), edge=GOOD, edge_w=1.5)
+    text(s, "1 KEPT", 9.62, 4.68, 2.9, 0.22, size=8.5, color=INK_FAINT, font=MONO, spacing_pt=100)
+    text(s, "Photographer —\nbinds to no venue field",
+         9.62, 4.92, 2.95, 0.8, size=10.5, color=INK_SOFT, line=1.34)
+    text(s, "A blanket reset would be easier and wrong; a test fails if the photographer goes stale.",
+         ML, 6.28, 11.6, 0.3, size=10.5, color=INK_FAINT, italic=True)
+    footer(s)
+    notes(s, "This is the screenshot to linger on. Six rows go amber, the photography row stays "
+             "green, and the banner says what changed in words.")
 
     # ---------------------------------------------------------------- 8 interface
     s = slide_blank(prs); bg(s)
     eyebrow(s, "The interface")
-    h2(s, "The launch, not the system's reasoning about it.")
-    text(s, "Five tabs a producer would actually open. The engine sits underneath\n"
-            "and surfaces only where a decision is needed.",
-         ML, 2.26, 10.2, 0.9, size=13.5, color=INK_SOFT, line=1.42)
-
-    tiles = [
-        ("OVERVIEW", "The day at a glance", "Next work, the team,\nbudget snapshot."),
-        ("CHECKLIST", "The commitments", "Venue, crew, production,\nphotography, budget."),
-        ("ITINERARY", "The event day", "Access, crew call, setup,\nrun of show, stop."),
-        ("BUDGET", "Approved vs committed", "Partner commitments and\nthe remaining line."),
-        ("PARTNERS", "The outside parties", "Venue, caterer,\nproduction, photographer."),
-        ("SIGN OFF", "One deliberate action", "In the header, only when\nthe plan holds."),
-    ]
-    cw_, ch_, gap = 3.86, 1.34, 0.25
-    for index, (tag, title, body) in enumerate(tiles):
-        cx = ML + (index % 3) * (cw_ + gap)
-        cy = 3.46 + (index // 3) * (ch_ + gap)
-        last = index == 5
-        card(s, cx, cy, cw_, ch_,
-             tint=RGBColor(0xFA, 0xF5, 0xF3) if last else RGBColor(0xFB, 0xFA, 0xF6))
-        text(s, tag, cx + 0.2, cy + 0.14, cw_ - 0.4, 0.2, size=8, color=INK_FAINT,
-             font=MONO, spacing_pt=100)
-        text(s, title, cx + 0.2, cy + 0.38, cw_ - 0.4, 0.26, size=12.5, color=INK, bold=True)
-        text(s, body, cx + 0.2, cy + 0.68, cw_ - 0.4, 0.6, size=10.5, color=INK_SOFT, line=1.32)
-    footer(s, 8)
+    h2(s, "The launch, not the system's reasoning about it.", size=28)
+    text(s, "Five tabs a producer would open. No readiness dashboard, no cross-checks panel.",
+         ML, 2.16, 10.4, 0.4, size=13, color=INK_SOFT, line=1.4)
+    shot(s, "shot-overview.png", ML, 2.68, 8.35,
+         caption="Overview — next work, the team, budget, and what needs a look")
+    card(s, 9.42, 2.72, 3.3, 3.66, tint=RGBColor(0xFB, 0xFA, 0xF6))
+    for i, (name, note) in enumerate([
+        ("Checklist", "commitments by area"),
+        ("Itinerary", "the event day"),
+        ("Budget", "approved vs committed"),
+        ("Partners", "venues, vendors, docs"),
+        ("Sign off", "header, when it holds"),
+    ]):
+        yy = 2.92 + i * 0.66
+        text(s, name, 9.64, yy, 2.9, 0.24, size=11.5, color=INK, bold=True)
+        text(s, note, 9.64, yy + 0.23, 2.9, 0.24, size=10, color=INK_FAINT)
+    footer(s)
     notes(s, "The redesign removed a readiness dashboard and a cross-checks panel. Those "
              "concepts still exist; they surface inline where a decision is needed.")
 
-    # ---------------------------------------------------------------- 9 AI
+    # ------------------------------------------------- 9 itinerary (screenshot)
+    s = slide_blank(prs); bg(s)
+    eyebrow(s, "Where the conflict surfaces")
+    h2(s, "The plan says why, in the words of the plan.", size=28)
+    text(s, "No score, no confidence band. A named row, the two values that disagree,\n"
+            "and the specific fix offered inline.",
+         ML, 2.14, 10.4, 0.8, size=12.5, color=INK_SOFT, line=1.4)
+    shot(s, "shot-itinerary.png", ML, 2.92, 8.8,
+         caption="Itinerary after the move — access ends 07:30, crew arrives 07:15")
+    card(s, 9.76, 2.92, 2.96, 1.86, tint=RGBColor(0xFA, 0xF5, 0xF3), edge=ACCENT, edge_w=1.5)
+    text(s, "THE ROW", 9.94, 3.06, 2.6, 0.22, size=8, color=INK_FAINT, font=MONO, spacing_pt=100)
+    text(s, "Crew call\n07:15 → 07:00", 9.94, 3.3, 2.66, 0.7, size=11.5, color=INK, line=1.3)
+    text(s, "One click applies the\nreviewed change and\nre-assesses.", 9.94, 4.06, 2.7, 0.7,
+         size=10, color=INK_SOFT, line=1.3)
+    text(s, "A planner does not narrate how the seating plan works. They show the plan and flag the one table that does not fit.",
+         ML, 6.3, 11.8, 0.3, size=10.5, color=INK_FAINT, italic=True)
+    footer(s)
+    notes(s, "Quoting the product language doc here is deliberate: the design brief asked for "
+             "a planner's binder, not a compliance console.")
+
+    # ------------------------------------------------- 10 sign-off (screenshot)
+    s = slide_blank(prs); bg(s)
+    eyebrow(s, "Where acceptance surfaces")
+    h2(s, "One action, and it names what is still open.", size=28)
+    text(s, "Sign-off lives in the header rather than in a tab. Opening it shows the two\n"
+            "questions still unresolved with the client, rather than a clean green state.",
+         ML, 2.14, 10.4, 0.9, size=12.5, color=INK_SOFT, line=1.4)
+    shot(s, "shot-settings.png", ML, 2.98, 7.4,
+         caption="Event settings — sample controls, project export, and the honest scope note")
+    card(s, 8.5, 2.98, 4.22, 3.5, tint=RGBColor(0xFB, 0xFA, 0xF6))
+    text(s, "WHAT IT ADMITS", 8.72, 3.16, 3.8, 0.22, size=8, color=INK_FAINT, font=MONO, spacing_pt=100)
+    text(s, "Every partner, person and\nprice is fictional.\n\n"
+            "The event-lead role is\nsimulated; there is no\nauthentication.\n\n"
+            "Changes save on this device\nonly — not to a live venue.",
+         8.72, 3.4, 3.8, 2.9, size=10.5, color=INK_SOFT, line=1.34)
+    footer(s)
+    notes(s, "If a judge opens settings first, they get the limitations in the product's own "
+             "words. That is intentional.")
+
+    # ---------------------------------------------------------------- 11 AI
     s = slide_blank(prs); bg(s)
     eyebrow(s, "The AI boundary")
     h2(s, "Proposes, and cannot write.")
@@ -395,7 +465,7 @@ def build() -> str:
     text(s, "Output lands as a proposal with author.kind = \"model\". Adoption is a separate\n"
             "human command with its own expected revision. The model has no channel to the writer.",
          ML, 4.7, 11.2, 0.9, size=13, color=INK_SOFT, line=1.42)
-    footer(s, 9)
+    footer(s)
     notes(s, "The strongest claim here is structural, not policy: there is no code path "
              "from model output to the authoritative record.")
 
@@ -425,7 +495,7 @@ def build() -> str:
 
     text(s, "Merging these is how a comment silently becomes a commitment.",
          ML, 5.94, 11, 0.3, size=11, color=INK_FAINT, italic=True)
-    footer(s, 10)
+    footer(s)
     notes(s, "Newest part of the product. The point is that a reviewer's opinion and a "
              "plan amendment have different types.")
 
@@ -444,7 +514,7 @@ def build() -> str:
             "defects confirm it — one of them was in the write path, where a rejected\n"
             "change still moved the field it named.",
          ML, 5.42, 11, 1.0, size=12, color=INK_SOFT, line=1.42)
-    footer(s, 11)
+    footer(s)
     notes(s, "Volunteering this is the credibility move. It shows the verification actually "
              "found things rather than confirming what was already believed.")
 
@@ -474,7 +544,7 @@ def build() -> str:
     text(s, "The app is a port, so the two behaviours a port most easily loses are pinned\n"
             "by name — and each guard is verified by removing it and watching exactly that check fail.",
          ML, 4.98, 11, 0.8, size=13, color=INK_SOFT, line=1.42)
-    footer(s, 12)
+    footer(s)
     notes(s, "If asked how we know the app matches the spec: the Python side is normative, "
              "and the parity checks fail loudly when a guard is removed.")
 
@@ -500,7 +570,7 @@ def build() -> str:
     card(s, ML, 5.86, 9.4, 0.52, tint=RGBColor(0xFA, 0xF5, 0xF3), edge=ACCENT, edge_w=1.4)
     text(s, "The scenario is one synthetic launch. A result on it is a result on it.",
          ML + 0.26, 6.03, 9.0, 0.3, size=12, color=ACCENT)
-    footer(s, 13)
+    footer(s)
     notes(s, "Do not soften these. Stating the limits first is what makes the rest "
              "believable.")
 
@@ -519,7 +589,7 @@ def build() -> str:
                                 ("spec", "docs/ — four documents, 24 checks")]):
         text(s, k, ML, 5.48 + i * 0.32, 1.5, 0.24, size=9, color=INK_FAINT, font=MONO, spacing_pt=60)
         text(s, v, ML + 1.6, 5.46 + i * 0.32, 8, 0.26, size=11.5, color=INK_SOFT)
-    footer(s, 14)
+    footer(s)
     notes(s, "Stop talking here. Let the last line sit.")
 
     prs.save(OUT)

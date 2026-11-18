@@ -1,6 +1,6 @@
 # Submission readiness plan
 
-**Last updated 2026-11-18 15:12 PST.**
+**Last updated 2026-11-18 15:35 PST.**
 Conservative cutoff 17:00 PST. Second cutoff 23:59 PST if organizer clarification arrives.
 
 ## Resolved: the application is deployed
@@ -64,7 +64,7 @@ Anon keys are public by design and row-level security is the boundary, so this i
 | App typecheck, lint, production build | Clean |
 | App self-check | 33/33 |
 | App source review | 39/39 |
-| Demo deck | 14 native PPTX slides, rendered and inspected |
+| Demo deck | 16 native PPTX slides with six live screenshots, rendered and inspected |
 | Live deployment | Reachable, interactive, no console errors |
 
 ## Sequence for the remaining window
@@ -73,7 +73,7 @@ Anon keys are public by design and row-level security is the boundary, so this i
 | --- | --- | --- | --- |
 | 1 | Open the live URL yourself and walk the seven-step flow | 10m | submission owner |
 | 2 | Decide the Supabase key question; disable AI if RLS is unconfirmed | 5m | submission owner |
-| 3 | Confirm the deck renders in the presentation software you will use | 10m | submission owner |
+| 3 | Confirm the deck renders in the software you will use; screenshots are embedded | 10m | submission owner |
 | 4 | Record the actual submission and any receipt | 10m | submission owner |
 | 5 | Capture a short screen recording if the event requires one | 20m | submission owner |
 

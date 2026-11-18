@@ -114,7 +114,10 @@ The app is a port, so the two engine behaviours most easily lost in a port are p
 | [fixtures/acceptance-cases.json](fixtures/acceptance-cases.json) | The verification checks in machine-readable form. |
 | [tools/validate_fixtures.py](tools/validate_fixtures.py) | Mechanical enforcement of the schema, binding, evidence and oracle rules. |
 | [submission/overview.md](submission/overview.md) | One-page description of the problem, the mechanism and the limits. |
-| [submission/oncuex-demo.pptx](submission/oncuex-demo.pptx) | The demo deck, 14 native PowerPoint slides with speaker notes. |
+| [submission/packet.md](submission/packet.md) | Submission packet: entry details, artifacts, verification, limitations. |
+| [submission/oncuex-demo.pptx](submission/oncuex-demo.pptx) | The demo deck, 16 native PowerPoint slides with screenshots and speaker notes. |
+| [submission/demo-slides.html](submission/demo-slides.html) | The same argument as a browser deck, no external assets. |
+| [submission/screenshots/](submission/screenshots/) | Six captures from the live deployment. |
 | [tools/build_deck.py](tools/build_deck.py) | Regenerates the deck from source. |
 
 ## License
