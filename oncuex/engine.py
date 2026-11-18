@@ -1,134 +1,26 @@
-"""Typed field schema and pure evaluation."""
+"""Requirement evaluation and integrated checks.
+
+Schema declarations, record validation and the binding primitives live in
+oncuex.schema. This module re-exports them as the engine's public surface and
+evaluates readiness over exactly one snapshot.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-from typing import Any, Iterable
+from typing import Iterable
 
-STATUSES = ("missing", "blocked", "outdated", "supported")
-
-CHECK_IDS = (
-    "access_vs_arrival",
-    "occupancy_vs_headcount",
-    "runofshow_vs_hardstop",
-    "total_cost",
-    "attestation_current",
-    "dependency_closure",
+from .schema import (
+    CHECK_IDS,
+    STATUSES,
+    SchemaError,
+    TYPED_PATHS,
+    binding_matches,
+    digest,
+    is_expired,
+    resolve,
+    validate_snapshot,
+    value_matches,
 )
-
-# path -> (kind, extra)
-TYPED_PATHS: dict[str, dict[str, Any]] = {
-    "assessmentRevision": {"type": "integer"},
-    "brief.guestCount": {"type": "integer"},
-    "brief.approvedBudget.minorUnits": {"type": "integer"},
-    "location.venueId": {"type": "string"},
-    "location.venueName": {"type": "string"},
-    "location.capacity": {"type": "integer"},
-    "location.roomPlan": {"type": "string"},
-    "location.loadingWindow.start": {"type": "time"},
-    "location.loadingWindow.end": {"type": "time"},
-    "location.hardStop": {"type": "time"},
-    "location.fireAttestation": {"type": "enum", "values": ["reviewed", "not_reviewed", "missing"]},
-    "crew.arrivalTime": {"type": "time"},
-    "production.runOfShowEnd": {"type": "time"},
-    "budget.commitments": {"type": "collection", "compare": "digest"},
-    "budget.committedTotal.currency": {"type": "string"},
-    "budget.committedTotal.minorUnits": {"type": "integer"},
-    "photographer.arrivalWindow.start": {"type": "time"},
-    "photographer.arrivalWindow.end": {"type": "time"},
-    "photographer.deliverables.editedImages": {"type": "integer"},
-    "photographer.deliverables.deliveryDays": {"type": "integer"},
-}
-
-_TIME = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
-
-
-class SchemaError(ValueError):
-    """Raised when a snapshot or binding violates the typed schema."""
-
-
-def canon(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def digest(obj: Any) -> str:
-    return "sha256:" + hashlib.sha256(canon(obj).encode()).hexdigest()
-
-
-def is_expired(evidence: dict, now: str) -> bool:
-    """An evidence record is stale once its expiry has passed."""
-    expires = evidence.get("expiresAt")
-    return bool(expires) and expires <= now
-
-
-def resolve(doc: dict, path: str):
-    cur: Any = doc
-    for part in path.split("."):
-        if not isinstance(cur, dict) or part not in cur:
-            return (False, None)
-        cur = cur[part]
-    return (True, cur)
-
-
-def value_matches(path: str, value: Any) -> bool:
-    spec = TYPED_PATHS.get(path)
-    if spec is None:
-        return False
-    kind = spec["type"]
-    if kind == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if kind == "string":
-        return isinstance(value, str)
-    if kind == "time":
-        return isinstance(value, str) and bool(_TIME.match(value))
-    if kind == "enum":
-        return value in spec["values"]
-    if kind == "collection":
-        return isinstance(value, (list, dict))
-    return False
-
-
-def binding_matches(path: str, value: Any, snapshot: dict) -> bool:
-    """A binding is valid when its stored value equals the snapshot value.
-
-    Collections are compared by canonical digest, scalars by equality after a
-    type check, so a string bound where an integer lives cannot silently match.
-    """
-    spec = TYPED_PATHS.get(path)
-    if spec is None:
-        return False
-    if spec["type"] == "collection":
-        if not (isinstance(value, str) and value.startswith("sha256:")):
-            return False
-        ok, actual = resolve(snapshot, path)
-        return ok and digest(actual) == value
-    if not value_matches(path, value):
-        return False
-    ok, actual = resolve(snapshot, path)
-    return ok and actual == value
-
-
-def validate_snapshot(snapshot: dict, requirements: Iterable[dict], evidence: Iterable[dict]) -> None:
-    for path in TYPED_PATHS:
-        if not path.startswith("brief."):
-            ok, value = resolve(snapshot, path)
-            if not ok:
-                raise SchemaError(f"declared path {path} missing from snapshot")
-            if not value_matches(path, value):
-                raise SchemaError(f"{path} holds {value!r}, not a valid {TYPED_PATHS[path]['type']}")
-
-    for req in requirements:
-        for path in req["fieldBindings"]:
-            if path not in TYPED_PATHS:
-                raise SchemaError(f"{req['id']} binds undeclared path {path}")
-    for ev in evidence:
-        for path, value in ev["boundFieldVersions"].items():
-            if path not in TYPED_PATHS:
-                raise SchemaError(f"{ev['id']} binds undeclared path {path}")
-            if TYPED_PATHS[path]["type"] != "collection" and not value_matches(path, value):
-                raise SchemaError(f"{ev['id']} binds {path} to {value!r}, wrong type")
 
 
 def _minutes(hhmm: str) -> int:

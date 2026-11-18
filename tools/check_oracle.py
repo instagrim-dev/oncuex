@@ -113,10 +113,13 @@ def main() -> int:
         scenario["requirements"],
         evidence_for(scenario, all_base),
     )
+    # Advance the clock past EV-1's expiry instead of writing an expiry that
+    # precedes its own observation. Unrelated evidence keeps a later expiry so
+    # the case still isolates EV-1.
+    expiring.project["_now"] = "2027-03-08T00:00:00Z"
     for ev in expiring.evidence:
-        if ev["id"] == "EV-1":
-            ev["expiresAt"] = "2027-02-01T00:00:00Z"
-    expiring.project["_now"] = "2027-02-15T00:00:00Z"
+        if ev["id"] != "EV-1":
+            ev["expiresAt"] = "2027-03-20T00:00:00Z"
     got6 = expiring.assess()
     expected6 = cases["O6"]["expected"]
     check("O6 statuses", statuses(got6) == expected6["requirementStatus"],

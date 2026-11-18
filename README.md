@@ -56,10 +56,11 @@ All people, venues, vendors and prices are fictional. No customer data, contract
 
 ## Reference implementation
 
-`oncuex/` is a headless engine covering the contract: typed schema validation, pure evaluation, an append-only event log with two independent counters, and revision-bound decisions. It has no UI and no platform adapter.
+`oncuex/` is a headless engine covering the contract: typed schema validation, pure evaluation, an append-only event log with two independent counters, and revision-bound decisions. `oncuex/schema.py` is the single declaration of every bindable path and record shape; the engine and the fixture validator both import it. It has no UI and no platform adapter.
 
 ```sh
 python3 tools/validate_fixtures.py   # schema, bindings, evidence, oracle coherence
+python3 tools/check_schema.py        # executable schema checks, positive and negative
 python3 tools/check_oracle.py        # 40 differential checks against the oracle
 python3 tools/reference_path.py      # baseline -> change -> recovery -> acceptance -> reload
 ```

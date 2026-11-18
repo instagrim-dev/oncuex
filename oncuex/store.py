@@ -17,7 +17,16 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from .engine import TYPED_PATHS, digest, evaluate, is_expired, value_matches
+from .engine import evaluate
+from .schema import (
+    FIELD_SCHEMA,
+    TYPED_PATHS,
+    digest,
+    is_expired,
+    validate_brief,
+    validate_evidence_record,
+    value_matches,
+)
 
 
 class CommandError(Exception):
@@ -150,6 +159,9 @@ class Store:
         replay = self._begin(command, "brief.adopted")
         if replay is not None:
             return replay
+        problems = validate_brief(brief)
+        if problems:
+            raise CommandError("invalid_brief", problems[0])
         self.project["brief"] = copy.deepcopy(brief)
         return self._commit(command, "brief.adopted", {"brief": brief})
 
@@ -165,6 +177,9 @@ class Store:
                 raise CommandError("undeclared_path", path)
             if spec["type"] != "collection" and not value_matches(path, value):
                 raise CommandError("type_mismatch", f"{path}={value!r}")
+        problems = validate_evidence_record(evidence, {r["id"] for r in self.requirements})
+        if problems:
+            raise CommandError("invalid_evidence", problems[0])
         self.evidence.append(copy.deepcopy(evidence))
         return self._commit(command, "evidence.attached", {"evidenceId": evidence["id"]})
 
@@ -176,8 +191,14 @@ class Store:
         if replay is not None:
             return replay
         fields = change["changedFields"]
-        for path in fields:
+        for path, delta in fields.items():
             self._check_path(path)
+            target = delta.get("to")
+            if FIELD_SCHEMA[path]["type"] == "collection":
+                if not isinstance(target, (list, dict)):
+                    raise CommandError("type_mismatch", f"{path}={target!r}")
+            elif not value_matches(path, target):
+                raise CommandError("type_mismatch", f"{path}={target!r}")
         for path, delta in fields.items():
             self._set_path(path, delta["to"])
         return self._commit(command, "change.adopted", {"changeId": change["id"]})

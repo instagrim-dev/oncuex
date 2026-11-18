@@ -62,6 +62,7 @@
         "baseAssessmentRevision": 8,
         "changedFields": [
           "location.venueId",
+          "location.venueName",
           "location.capacity",
           "location.loadingWindow.start",
           "location.loadingWindow.end",
@@ -69,7 +70,8 @@
           "location.fireAttestation",
           "location.roomPlan",
           "crew.arrivalTime",
-          "budget.commitments"
+          "budget.commitments",
+          "budget.committedTotal.minorUnits"
         ]
       },
       "requirementStatus": {
@@ -220,7 +222,12 @@
         },
         "integrated": {
           "status": "fail",
-          "failingChecks": ["dependency_closure"]
+          "failingChecks": [
+            {
+              "id": "dependency_closure",
+              "reason": "Three blocking requirements are not supported: REQ-venue-loading-1, REQ-crew-arrival-1, REQ-production-runofshow-1."
+            }
+          ]
         },
         "readiness": "not_ready",
         "decisionEligibility": {
@@ -252,7 +259,15 @@
         "requirementStatus": { "REQ-venue-capacity-1": "missing" },
         "readiness": "not_ready",
         "residuals": [{ "requirementId": "REQ-venue-capacity-1", "code": "mandatory_evidence_missing" }],
-        "integrated": { "status": "fail", "failingChecks": ["dependency_closure"] }
+        "integrated": {
+          "status": "fail",
+          "failingChecks": [
+            {
+              "id": "dependency_closure",
+              "reason": "One blocking requirement is not supported: REQ-venue-capacity-1."
+            }
+          ]
+        }
       }
     },
 

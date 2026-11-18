@@ -249,6 +249,8 @@ A command is validated before any state is touched. A rejected write leaves the 
 | `role_denied` | Actor does not hold the required role |
 | `duplicate_evidence` | Evidence ID already attached |
 | `duplicate_decision` | Decision ID already recorded under a different command |
+| `invalid_brief` | Brief does not satisfy the declared brief schema |
+| `invalid_evidence` | Evidence record does not satisfy the declared record schema |
 | `undeclared_path` | Change path is not in the typed schema |
 | `immutable_path` | Change path is a counter or identity |
 | `bad_path` | Intermediate container does not exist |

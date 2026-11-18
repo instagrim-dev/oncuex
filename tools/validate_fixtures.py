@@ -1,31 +1,39 @@
 #!/usr/bin/env python3
 """Contract validator for the OnCueX reference scenario.
 
-Enforces the schema, binding, evidence and oracle rules mechanically so that a
-fixture cannot drift from the specification. Exit code 1 on any error.
+Schema and record validation come from oncuex.schema, the canonical
+declaration the engine also uses. This tool adds the checks that need the
+whole document or the oracle: state-level digest matches, source provenance,
+asserted amounts, expectation coherence and acceptance-case references.
+
+Expected results are read here and only here. Nothing under oncuex/ imports
+this file or the oracle, so an expectation cannot become an evaluator input.
 
     python3 tools/validate_fixtures.py
 """
 
-import hashlib
 import json
 import os
 import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from oncuex.schema import (  # noqa: E402
+    CHECK_IDS,
+    FIELD_SCHEMA,
+    digest,
+    resolve,
+    validate_document,
+)
+
 SCENARIO = os.path.join(ROOT, "fixtures", "scenario.json")
 ORACLE = os.path.join(ROOT, "fixtures", "expected-impact.json")
 CASES = os.path.join(ROOT, "fixtures", "acceptance-cases.json")
 
-CHECK_IDS = {
-    "access_vs_arrival",
-    "occupancy_vs_headcount",
-    "runofshow_vs_hardstop",
-    "total_cost",
-    "attestation_current",
-    "dependency_closure",
-}
+CHECK_ID_SET = set(CHECK_IDS)
+AREAS = {"readiness", "change", "writes", "ai", "persistence", "decision"}
 
 errors: list[str] = []
 warnings: list[str] = []
@@ -39,195 +47,53 @@ def warn(msg: str) -> None:
     warnings.append(msg)
 
 
-def canon(obj) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def digest(obj) -> str:
-    return "sha256:" + hashlib.sha256(canon(obj).encode()).hexdigest()
-
-
-def resolve(doc, path: str):
-    cur = doc
-    for part in path.split("."):
-        if not isinstance(cur, dict) or part not in cur:
-            return (False, None)
-        cur = cur[part]
-    return (True, cur)
-
-
-def leaves(obj, prefix: str = "") -> set[str]:
-    out: set[str] = set()
+def flatten(obj, prefix=""):
+    out = {}
     if isinstance(obj, dict):
         for key, val in obj.items():
-            out |= leaves(val, f"{prefix}.{key}" if prefix else key)
+            out.update(flatten(val, f"{prefix}.{key}" if prefix else key))
     else:
-        out.add(prefix)
+        out[prefix] = obj
     return out
 
 
-def type_ok(kind: str, value) -> bool:
-    if kind == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if kind == "string":
-        return isinstance(value, str)
-    if kind == "time":
-        return isinstance(value, str) and bool(re.fullmatch(r"\d{2}:\d{2}", value or ""))
-    if kind == "enum":
-        return True
-    if kind == "collection":
-        return isinstance(value, (list, dict))
-    return False
-
-
 def load():
-    scenario = json.load(open(SCENARIO, encoding="utf-8"))
-    oracle = json.load(open(ORACLE, encoding="utf-8"))
-    cases = json.load(open(CASES, encoding="utf-8"))
+    with open(SCENARIO, encoding="utf-8") as handle:
+        scenario = json.load(handle)
+    with open(ORACLE, encoding="utf-8") as handle:
+        oracle = json.load(handle)
+    with open(CASES, encoding="utf-8") as handle:
+        cases = json.load(handle)
     return scenario, oracle, cases
 
 
-def check_schema(scn) -> dict:
-    schema = scn["fieldSchema"]
-    brief = scn["scenario"]["brief"]
+def check_document(scn) -> None:
+    errors.extend(validate_document(scn))
 
-    for path, spec in schema.items():
-        for name in scn["state"]:
-            if path.startswith("brief."):
-                ok, _ = resolve(brief, path[len("brief."):])
+
+def check_state_digests(scn) -> None:
+    """A collection binding must name a digest of some declared state value."""
+    for ev in scn["evidence"]:
+        for path, value in ev["boundFieldVersions"].items():
+            if FIELD_SCHEMA.get(path, {}).get("type") != "collection":
+                continue
+            for state in scn["state"].values():
+                ok, actual = resolve(state, path)
+                if ok and digest(actual) == value:
+                    break
             else:
-                ok, _ = resolve(scn["state"][name], path)
-            if not ok:
-                err(f"fieldSchema: {path} not present in state.{name}")
-
-    declared = set(schema)
-    for name, doc in scn["state"].items():
-        for path in leaves(doc):
-            if path in declared:
-                continue
-            if any(d.startswith(path + ".") for d in declared):
-                continue
-            err(f"state.{name}: path {path} not declared in fieldSchema")
-
-    for path, spec in schema.items():
-        kind = spec["type"] if isinstance(spec, dict) else spec
-        if path.startswith("brief."):
-            ok, val = resolve(brief, path[len("brief."):])
-            if ok and not type_ok(kind, val):
-                err(f"type: brief.{path} = {val!r} not {kind}")
-            continue
-        for name, doc in scn["state"].items():
-            ok, val = resolve(doc, path)
-            if not ok:
-                continue
-            if not type_ok(kind, val):
-                err(f"type: state.{name}.{path} = {val!r} not {kind}")
-                continue
-            if kind == "enum" and val not in spec.get("values", [val]):
-                err(f"enum: state.{name}.{path} = {val!r} not declared")
-            if kind == "time" and val:
-                hours, minutes = val.split(":")
-                if not (0 <= int(hours) < 24 and 0 <= int(minutes) < 60):
-                    err(f"time: state.{name}.{path} = {val!r} out of range")
-    return schema
+                err(f"{ev['id']}: composite digest for {path} matches no state")
 
 
-def check_engine_schema(schema: dict) -> None:
-    """The engine's typed path table must not drift from the fixture schema."""
-    sys.path.insert(0, ROOT)
-    try:
-        from oncuex.engine import TYPED_PATHS
-    except Exception as exc:
-        err(f"engine schema not importable: {exc}")
-        return
-
-    missing = sorted(set(schema) - set(TYPED_PATHS))
-    extra = sorted(set(TYPED_PATHS) - set(schema))
-    if missing:
-        err(f"engine schema missing paths: {missing}")
-    if extra:
-        err(f"engine schema declares paths absent from fieldSchema: {extra}")
-
-
-def check_bindings(scn, schema) -> dict:
-    req_ids = {r["id"] for r in scn["requirements"]}
-    for req in scn["requirements"]:
-        for path in req["fieldBindings"]:
-            if path not in schema:
-                err(f"binding {req['id']} -> {path} not declared in fieldSchema")
-        for pre in req["prerequisiteIds"]:
-            if pre not in req_ids:
-                err(f"prerequisite {req['id']} -> {pre} unknown")
-
-    graph = {r["id"]: list(r["prerequisiteIds"]) for r in scn["requirements"]}
-    seen: set[str] = set()
-    stack: set[str] = set()
-
-    def dfs(node, path):
-        if node in stack:
-            err(f"cycle: {' -> '.join(path + [node])}")
-            return
-        if node in seen:
-            return
-        stack.add(node)
-        for child in graph.get(node, []):
-            dfs(child, path + [node])
-        stack.discard(node)
-        seen.add(node)
-
-    for node in graph:
-        dfs(node, [])
-    return graph
-
-
-def check_evidence(scn, schema) -> list:
-    req_ids = {r["id"] for r in scn["requirements"]}
+def check_provenance(scn) -> None:
     sources = {s["id"]: s for s in scn["sourceReferences"]}
-    evidence = scn["evidence"]
-    ids = [e["id"] for e in evidence]
-    if len(ids) != len(set(ids)):
-        err("duplicate evidence id")
-
-    for ev in evidence:
-        if ev["requirementId"] not in req_ids:
-            err(f"{ev['id']}: unknown requirement {ev['requirementId']}")
-        for ref in ev["sourceRefIds"]:
-            if ref not in sources:
-                err(f"{ev['id']}: unknown source {ref}")
-
-        for path, val in ev["boundFieldVersions"].items():
-            if path not in schema:
-                err(f"{ev['id']}: bound field {path} not in fieldSchema")
-                continue
-            spec = schema[path]
-            kind = spec["type"] if isinstance(spec, dict) else spec
-            if kind == "collection":
-                if not (isinstance(val, str) and val.startswith("sha256:")):
-                    err(f"{ev['id']}: composite {path} not stored as digest")
-                    continue
-                for name, doc in scn["state"].items():
-                    ok, actual = resolve(doc, path)
-                    if ok and digest(actual) == val:
-                        break
-                else:
-                    err(f"{ev['id']}: composite digest for {path} matches no state")
-                continue
-            if not type_ok(kind, val):
-                err(f"{ev['id']}: bound {path} = {val!r} not {kind}")
-
-        expected = digest(
-            {"sourceRefIds": ev["sourceRefIds"], "sourceExcerpt": ev["sourceExcerpt"]}
-        )
-        if expected != ev["contentDigest"]:
-            err(f"{ev['id']}: contentDigest does not match excerpt")
-
+    for ev in scn["evidence"]:
         cited = [sources[r] for r in ev["sourceRefIds"] if r in sources]
         if cited and not any(
             ev["sourceExcerpt"][:40] in s["excerpt"] or s["excerpt"][:40] in ev["sourceExcerpt"]
             for s in cited
         ):
             warn(f"{ev['id']}: excerpt not textually present in a cited source")
-    return evidence
 
 
 def check_amounts(scn) -> None:
@@ -248,14 +114,65 @@ def check_amounts(scn) -> None:
             err(f"state.{name}: declared total != sum of line items")
 
 
-def check_oracle(scn, oracle, graph, evidence, schema) -> None:
-    cases = {c["id"]: c for c in oracle["cases"]}
+def failing_checks(case) -> list:
+    if "integrated" in case:
+        return case["integrated"].get("failingChecks", [])
+    return case.get("expected", {}).get("integrated", {}).get("failingChecks", [])
+
+
+def check_failing_check_shape(oracle) -> None:
+    """Every expected failure names its check and states why it failed."""
+    for case in oracle["cases"]:
+        entries = failing_checks(case)
+        if not entries:
+            continue
+        seen = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                err(f"{case['id']}: failing check {entry!r} must be "
+                    f"{{'id', 'reason'}}, not a bare identifier")
+                continue
+            if set(entry) != {"id", "reason"}:
+                err(f"{case['id']}: failing check must carry exactly id and reason")
+                continue
+            if entry["id"] not in CHECK_ID_SET:
+                err(f"{case['id']}: unknown failing check {entry['id']!r}")
+            if not isinstance(entry["reason"], str) or not entry["reason"].strip():
+                err(f"{case['id']}: failing check {entry['id']} has no stated reason")
+            if entry["id"] in seen:
+                err(f"{case['id']}: duplicate failing check {entry['id']}")
+            seen.add(entry["id"])
+
+
+def check_impact(scn, oracle) -> None:
+    """The declared venue change is exactly the field-level state diff."""
+    o2 = next(case for case in oracle["cases"] if case["id"] == "O2")
+    before = scn["state"]["baseline"]
+    after = scn["state"]["venueChange"]
+    before_fields, after_fields = flatten(before), flatten(after)
+    actual = {
+        path
+        for path in set(before_fields) | set(after_fields)
+        if path != "assessmentRevision"
+        and before_fields.get(path) != after_fields.get(path)
+    }
+    declared = set(o2["trigger"]["changedFields"])
+    if declared != actual:
+        err(f"O2 changedFields missing {sorted(actual - declared)} "
+            f"and inventing {sorted(declared - actual)}")
+
+
+def check_oracle(scn, oracle) -> None:
+    cases = {case["id"]: case for case in oracle["cases"]}
     req_ids = {r["id"] for r in scn["requirements"]}
+
+    check_failing_check_shape(oracle)
+    check_impact(scn, oracle)
 
     o2 = cases["O2"]
     got = {c["id"] for c in o2["integrated"]["failingChecks"]}
-    if got != CHECK_IDS:
-        err(f"O2 failingChecks {sorted(got)} != all six {sorted(CHECK_IDS)}")
+    if got != CHECK_ID_SET:
+        err(f"O2 failingChecks {sorted(got)} != all six {sorted(CHECK_ID_SET)}")
     impacted = set(o2["impacted"]["requirementIds"])
     unaffected = set(o2["unaffected"]["requirementIds"])
     if impacted & unaffected:
@@ -266,7 +183,10 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
         if rid not in req_ids:
             err(f"O2 unknown requirement {rid}")
 
+    # The expiry case must equal the closure derived from the scenario graph,
+    # not a set asserted independently of it.
     o6 = cases["O6"]["expected"]
+    graph = {r["id"]: list(r["prerequisiteIds"]) for r in scn["requirements"]}
     seed = "REQ-venue-loading-1"
     closure = {seed}
     changed = True
@@ -278,6 +198,8 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
                 changed = True
     if set(o6["impacted"]["requirementIds"]) != closure:
         err(f"O6 impacted set != derived dependency closure {sorted(closure)}")
+    if "REQ-production-runofshow-1" not in closure:
+        err("O6 closure omits REQ-production-runofshow-1, a declared dependent")
     for rid in closure:
         if rid not in o6["requirementStatus"]:
             err(f"O6: dependent {rid} missing from requirementStatus")
@@ -295,7 +217,7 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
             continue
         have = [
             e
-            for e in evidence
+            for e in scn["evidence"]
             if e["requirementId"] == rid
             and e["reviewDisposition"] == "accepted"
             and (e["id"] in recovery_ids or e["id"] == "EV-7")
@@ -304,7 +226,7 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
             err(f"O4: {rid} supported with no accepted recovery evidence")
             continue
         for ev in have:
-            for path, val in ev["boundFieldVersions"].items():
+            for path, value in ev["boundFieldVersions"].items():
                 if path.startswith("brief."):
                     ok, actual = resolve(brief, path[len("brief."):])
                 else:
@@ -312,12 +234,11 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
                 if not ok:
                     err(f"O4: {ev['id']} binds {path} absent from recovered state")
                     continue
-                kind = schema[path]["type"] if isinstance(schema[path], dict) else schema[path]
-                if kind == "collection":
-                    if digest(actual) != val:
+                if FIELD_SCHEMA[path]["type"] == "collection":
+                    if digest(actual) != value:
                         err(f"O4: {ev['id']} {path} digest does not match recovered state")
-                elif actual != val:
-                    err(f"O4: {ev['id']} binds {path}={val!r} but recovered state holds {actual!r}")
+                elif actual != value:
+                    err(f"O4: {ev['id']} binds {path}={value!r} but recovered state holds {actual!r}")
 
     for cid in ("O9", "O10", "O11"):
         exp = cases[cid]["expected"]
@@ -338,22 +259,45 @@ def check_oracle(scn, oracle, graph, evidence, schema) -> None:
                 err("decision.recorded advanced assessmentRevision")
 
 
-def check_cases(cases) -> None:
-    ids = [c["id"] for c in cases["cases"]]
+def check_cases(cases, oracle_ids: set[str]) -> None:
+    ids = [case["id"] for case in cases["cases"]]
     expected = [f"V{n}" for n in range(1, len(ids) + 1)]
     if ids != expected:
         err(f"acceptance case ids not contiguous from V1: {ids}")
 
+    for case in cases["cases"]:
+        label = case["id"]
+        if case.get("area") not in AREAS:
+            err(f"{label}: unknown area {case.get('area')!r}")
+        if not isinstance(case.get("action"), str) or not case["action"].strip():
+            err(f"{label}: action must be a non-empty string")
+        if not isinstance(case.get("expected"), dict) or not case["expected"]:
+            err(f"{label}: expected must be a non-empty object")
+        if "oracle" in case and case["oracle"] not in oracle_ids:
+            err(f"{label}: unknown oracle case {case['oracle']!r}")
+        for entry in failing_checks(case):
+            if not isinstance(entry, str):
+                err(f"{label}: acceptance failing check must be a check id string")
+            elif entry not in CHECK_ID_SET:
+                err(f"{label}: unknown failing check {entry!r}")
+
 
 def main() -> int:
     scenario, oracle, cases = load()
-    schema = check_schema(scenario)
-    check_engine_schema(schema)
-    graph = check_bindings(scenario, schema)
-    evidence = check_evidence(scenario, schema)
+
+    check_document(scenario)
+    if errors:
+        # Structural failures make the semantic checks unsafe to run.
+        for message in errors:
+            print(f"ERROR {message}")
+        print(f"\n{len(errors)} error(s), {len(warnings)} warning(s)")
+        return 1
+
+    check_state_digests(scenario)
+    check_provenance(scenario)
     check_amounts(scenario)
-    check_oracle(scenario, oracle, graph, evidence, schema)
-    check_cases(cases)
+    check_oracle(scenario, oracle)
+    check_cases(cases, {case["id"] for case in oracle["cases"]})
 
     for message in warnings:
         print(f"WARN  {message}")
