@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { emptyReview, importSource, isReviewData, reviewSuggestion, SAMPLE_SOURCES } from "@/oncuex/source-review";
 import type { ReviewData, ReviewStatus, SourceItem, Suggestion } from "@/oncuex/source-review";
+import { nextOutput } from "@/oncuex/retained-output";
+import type { RetainedOutput } from "@/oncuex/retained-output";
 
 const KEY = "oncuex.source-review.v1";
 function read(): { data: ReviewData; damaged: boolean } {
@@ -32,6 +34,15 @@ export function useSourceReview() {
   const assign = useCallback((id: string, projectId: string) => update((current) => ({ ...current, suggestions: current.suggestions.map((item) => item.id === id ? { ...item, projectId } : item), history: [`Project assigned to ${id}`, ...current.history] })), [update]);
   const addSuggestion = useCallback((item: Suggestion) => update((current) => current.suggestions.some((existing) => existing.id === item.id) ? current : { ...current, suggestions: [...current.suggestions, item], history: [`AI suggestion prepared for ${item.sourceIds.join(", ")}`, ...current.history] }), [update]);
   const saveComparison = useCallback((comparison: string) => update((current) => ({ ...current, comparison, history: ["Venue comparison updated", ...current.history] })), [update]);
+  const saveOutput = useCallback((input: { projectId: string; title: string; body: string; sourceIds: string[]; concernIds: string[]; basis: string }): RetainedOutput => {
+    let saved: RetainedOutput | null = null;
+    update((current) => {
+      saved = nextOutput(current.outputs ?? [], input);
+      return { ...current, outputs: [...(current.outputs ?? []), saved], history: [`Client update version ${saved.version} saved for review`, ...current.history] };
+    });
+    if (!saved) throw new Error("The output could not be saved.");
+    return saved;
+  }, [update]);
   const replace = useCallback((next: ReviewData) => update(() => next, true), [update]);
-  return { data, warning, add, sync, review, assign, addSuggestion, saveComparison, replace };
+  return { data, warning, add, sync, review, assign, addSuggestion, saveComparison, saveOutput, replace };
 }

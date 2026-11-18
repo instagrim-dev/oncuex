@@ -6,7 +6,11 @@ import { PERSONAS, REQUIREMENTS, initialProject } from "@/oncuex/scenario";
 import { loadBaseline } from "@/oncuex/demo";
 import { useSourceReview } from "@/hooks/use-source-review";
 import { emptyReview, isReviewData } from "@/oncuex/source-review";
-import type { Role } from "@/oncuex/types";
+import { preserveSample, readPreservedSamples } from "@/oncuex/sample-archive";
+import type { PreservedSample } from "@/oncuex/sample-archive";
+import type { Brief, Role } from "@/oncuex/types";
+import { newEventProject } from "@/oncuex/new-event";
+import type { SourceItem } from "@/oncuex/source-review";
 
 const STORAGE_KEY = "oncuex.operator.record.v2";
 const BLANK_KEY = "oncuex.blank.v1";
@@ -102,6 +106,7 @@ export interface ReloadCheck {
 export function useOperatorSession() {
   const review = useSourceReview();
   const replaceReview = review.replace;
+  const addReview = review.add;
   const [bootState] = useState(boot);
   const storeRef = useRef(bootState.store);
   const [version, setVersion] = useState(0);
@@ -109,6 +114,9 @@ export function useOperatorSession() {
   const [error, setError] = useState<string | null>(bootState.notice);
   const [flash, setFlash] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(bootState.savedAt);
+  const [preservedSamples, setPreservedSamples] = useState<PreservedSample[]>(() => {
+    try { return readPreservedSamples(window.localStorage); } catch { return []; }
+  });
   const [reloadCheck, setReloadCheck] = useState<ReloadCheck | null>(
     bootState.restoredAt
       ? {
@@ -122,25 +130,26 @@ export function useOperatorSession() {
 
   const persona = PERSONAS.find((candidate) => candidate.id === personaId) ?? PERSONAS[0];
 
-  const apply = useCallback((label: string, action: (store: Store) => string) => {
+  const apply = useCallback((label: string, action: (store: Store) => string): { ok: boolean; detail: string; warning: string | null } => {
     const store = storeRef.current;
+    const before = store.export();
     try {
       const detail = action(store);
       const persisted = persist(store);
       setSavedAt(persisted.savedAt);
       setError(persisted.warning);
       setFlash(`${label} — ${detail}`);
+      setVersion((current) => current + 1);
+      return { ok: true, detail, warning: persisted.warning };
     } catch (commandError) {
+      const detail = describeCommandError(commandError);
       setFlash(null);
-      setError(describeCommandError(commandError));
-      // A rejected command writes nothing, but a multi-command action can stop
-      // midway. Restore the last saved record so the screen never shows a
-      // half-applied sequence.
-      const recovered = readSaved();
-      storeRef.current = recovered ? recovered.store : freshStore();
-      setSavedAt(recovered?.savedAt ?? null);
+      setError(detail);
+      // Restore the exact pre-action in-memory record, including unsaved work.
+      storeRef.current = Store.fromExport(before);
+      setVersion((current) => current + 1);
+      return { ok: false, detail, warning: null };
     }
-    setVersion((current) => current + 1);
   }, []);
 
   const setClock = useCallback((iso: string) => {
@@ -175,23 +184,76 @@ export function useOperatorSession() {
     setVersion((current) => current + 1);
   }, [replaceReview]);
 
-  const reloadSample = useCallback(() => {
+  const reloadSample = useCallback((): boolean => {
     try {
-      window.localStorage.removeItem(BLANK_KEY);
-    } catch {
-      // ignore
+      if (window.localStorage.getItem(STORAGE_KEY) && !readSaved()) throw new Error("The existing saved plan could not be validated; it was not replaced.");
+      if (review.warning?.startsWith("Saved source reviews could not be validated")) throw new Error("Saved source reviews could not be validated; the plan was not replaced.");
+      const current = storeRef.current;
+      const hadCurrent = hasBrief(current.snapshot()) || current.events.length > 0;
+      if (hadCurrent) {
+        const preserved = preserveSample(window.localStorage, current.export(), review.data, crypto.randomUUID(), new Date().toISOString());
+        setPreservedSamples(preserved);
+      }
+      const store = freshStore();
+      loadBaseline(store);
+      const persisted = persist(store);
+      storeRef.current = store;
+      setSavedAt(persisted.savedAt);
+      setReloadCheck(null);
+      setPersonaId(PERSONAS[0].id);
+      setFlash(hadCurrent ? "Corrected sample loaded. The previous plan and its history are preserved in Settings on this device." : "Corrected sample loaded. No previous plan was replaced.");
+      setError(persisted.warning);
+      setVersion((currentVersion) => currentVersion + 1);
+      return true;
+    } catch (reloadError) {
+      setFlash(null);
+      setError(`The sample was not loaded. ${describeCommandError(reloadError)} The current plan was left unchanged.`);
+      return false;
     }
-    const store = freshStore();
-    loadBaseline(store);
-    const persisted = persist(store);
-    storeRef.current = store;
-    setSavedAt(persisted.savedAt);
-    setReloadCheck(null);
-    setPersonaId(PERSONAS[0].id);
-    setFlash("Sample plan reloaded. The Northwind launch is ready to review.");
-    setError(persisted.warning);
-    setVersion((current) => current + 1);
-  }, []);
+  }, [review.data, review.warning]);
+
+  const startNewEvent = useCallback((brief: Brief, sourceText: string): { ok: boolean; detail: string } => {
+    try {
+      if (!sourceText.trim()) throw new Error("The original brief text is required.");
+      const current = storeRef.current;
+      if (hasBrief(current.snapshot()) || current.events.length > 0) {
+        setPreservedSamples(preserveSample(window.localStorage, current.export(), review.data, crypto.randomUUID(), new Date().toISOString()));
+      }
+      const next = new Store(newEventProject(brief), structuredClone(REQUIREMENTS), []);
+      next.adoptBrief({ commandId: "CMD-NEW-1", role: "project_manager", actor: PERSONAS[0].id, expectedAssessmentRevision: 0 }, brief);
+      const persisted = persist(next);
+      storeRef.current = next;
+      replaceReview(emptyReview());
+      const item: SourceItem = {
+        id: `brief-${crypto.randomUUID()}`,
+        channel: "Manual",
+        origin: "manual",
+        externalId: `brief-${crypto.randomUUID()}`,
+        threadId: `thread-brief`,
+        author: "Client brief · manually entered",
+        timestamp: new Date().toISOString(),
+        timezone: brief.timezone,
+        projectId: next.snapshot().id,
+        title: `Client brief · ${brief.project}`,
+        rawText: sourceText.trim(),
+        attachments: [],
+        locator: "Brief intake · manual",
+      };
+      addReview(item);
+      setPersonaId(PERSONAS[0].id);
+      setSavedAt(persisted.savedAt);
+      setReloadCheck(null);
+      setError(persisted.warning);
+      setFlash(`New event started from the reviewed brief. Unknown venue, schedule and documents have not been filled from the sample.${persisted.warning ? ` ${persisted.warning}` : ""}`);
+      setVersion((currentVersion) => currentVersion + 1);
+      return { ok: true, detail: "New event started." };
+    } catch (error) {
+      const detail = describeCommandError(error);
+      setFlash(null);
+      setError(`The new event could not be started: ${detail} The current plan was left unchanged.`);
+      return { ok: false, detail };
+    }
+  }, [replaceReview, addReview, review.data]);
 
   const reloadFromExport = useCallback(() => {
     const before = storeRef.current;
@@ -275,6 +337,20 @@ export function useOperatorSession() {
     URL.revokeObjectURL(url);
   }, [review.data]);
 
+  const downloadPreservedSample = useCallback((id: string) => {
+    try {
+      const snapshot = readPreservedSamples(window.localStorage).find((entry) => entry.id === id);
+      if (!snapshot) throw new Error("The preserved record was not found.");
+      const blob = new Blob([JSON.stringify({ oncuexProjectBundleVersion: 1, project: snapshot.project, sourceReview: snapshot.sourceReview }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `oncuex-preserved-${snapshot.savedAt.slice(0, 10)}.json`;
+      document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+    } catch (archiveError) {
+      setError(`The preserved record could not be downloaded: ${describeCommandError(archiveError)}`);
+    }
+  }, []);
+
   const clearMessages = useCallback(() => {
     setError(null);
     setFlash(null);
@@ -291,11 +367,14 @@ export function useOperatorSession() {
     error,
     flash,
     savedAt,
+    preservedSamples,
+    downloadPreservedSample,
     reloadCheck,
     apply,
     setClock,
     reset,
     reloadSample,
+    startNewEvent,
     reloadFromExport,
     downloadExport,
     restoreFromFile,

@@ -126,6 +126,7 @@ export function BudgetView({ session, onStartSample, onOpenTab }: BudgetViewProp
         )}
 
         {session.review.data.suggestions.filter((item) => item.projectId === snapshot.id && item.workArea.includes("Budget") && item.status === "concern").map((item) => <div key={item.id} className="mt-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs"><strong>Proposed, not approved:</strong> {item.title} · {item.excerpt}</div>)}
+        {snapshot.budget.commitments.length === 0 && <p className="mt-3 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">No partner commitments are recorded for this event yet. The approved ceiling does not establish bookings or costs.</p>}
         <div className="mt-4 space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Commitments

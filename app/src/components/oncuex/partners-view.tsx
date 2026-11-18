@@ -65,7 +65,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
       name: snapshot.location.venueName,
       role: "Venue",
       category: "venue",
-      description: `${snapshot.location.capacity} capacity · access ${snapshot.location.loadingWindow.start}–${snapshot.location.loadingWindow.end} · hard stop ${snapshot.location.hardStop}`,
+      description: snapshot.location.venueId === "UNASSIGNED" ? "Venue, capacity and access are not recorded yet." : `${snapshot.location.capacity} capacity · access ${snapshot.location.loadingWindow.start}–${snapshot.location.loadingWindow.end} · hard stop ${snapshot.location.hardStop}`,
       requirementIds: [
         "REQ-venue-loading-1",
         "REQ-venue-capacity-1",
@@ -96,7 +96,7 @@ export function PartnersView({ session, onStartSample, onOpenTab }: PartnersView
       name: snapshot.budget.commitments.find((item) => item.category === "photography")?.vendor ?? "Photographer not recorded",
       role: "Photography",
       category: "photography",
-      description: `${snapshot.photographer.deliverables.editedImages} edited images within ${snapshot.photographer.deliverables.deliveryDays} days.`,
+      description: snapshot.photographer.deliverables.editedImages > 0 ? `${snapshot.photographer.deliverables.editedImages} edited images within ${snapshot.photographer.deliverables.deliveryDays} days.` : "Photography scope is not recorded yet.",
       requirementIds: ["REQ-photographer-deliverables-1"],
       icon: Camera,
     },

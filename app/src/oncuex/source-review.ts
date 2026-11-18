@@ -1,4 +1,6 @@
 import { digest } from "./schema";
+import { validateOutputs } from "./retained-output";
+import type { RetainedOutput } from "./retained-output";
 
 export type Channel = "Gmail" | "Slack" | "iMessage" | "Zoom" | "Research" | "Manual";
 export type ReviewStatus = "needs_review" | "concern" | "dismissed" | "deferred" | "clarification" | "resolved";
@@ -38,8 +40,8 @@ export interface Suggestion {
   suggestedBy?: "ai" | "sample" | "manual";
 }
 
-export interface ReviewData { sources: SourceItem[]; suggestions: Suggestion[]; history: string[]; comparison?: string }
-export const emptyReview = (): ReviewData => ({ sources: [], suggestions: [], history: [] });
+export interface ReviewData { sources: SourceItem[]; suggestions: Suggestion[]; history: string[]; comparison?: string; outputs?: RetainedOutput[] }
+export const emptyReview = (): ReviewData => ({ sources: [], suggestions: [], history: [], outputs: [] });
 export function isReviewData(value: unknown): value is ReviewData {
   if (!value || typeof value !== "object") return false;
   const data = value as ReviewData;
@@ -47,7 +49,9 @@ export function isReviewData(value: unknown): value is ReviewData {
   const sourceIds = new Set(data.sources.map((s) => s?.id));
   if (sourceIds.size !== data.sources.length || new Set(data.suggestions.map((s) => s?.id)).size !== data.suggestions.length) return false;
   if (data.comparison !== undefined && typeof data.comparison !== "string") return false;
-  return data.sources.every((s) => s && typeof s.id === "string" && typeof s.externalId === "string" && typeof s.threadId === "string" && typeof s.rawText === "string" && typeof s.author === "string" && typeof s.timestamp === "string" && typeof s.timezone === "string" && typeof s.title === "string" && typeof s.locator === "string" && (s.projectId === null || typeof s.projectId === "string") && ["Gmail", "Slack", "iMessage", "Zoom", "Research", "Manual"].includes(s.channel) && ["simulated", "manual"].includes(s.origin) && Array.isArray(s.attachments) && s.attachments.every((a) => typeof a === "string") && (!s.contentDigest || s.contentDigest === digest({ id: s.id, rawText: s.rawText }))) && data.suggestions.every((s) => s && typeof s.id === "string" && Array.isArray(s.sourceIds) && s.sourceIds.some((id) => sourceIds.has(id)) && s.sourceIds.every((id) => typeof id === "string") && typeof s.excerpt === "string" && typeof s.title === "string" && typeof s.consequence === "string" && typeof s.workArea === "string" && (s.projectId === null || typeof s.projectId === "string") && ["risk", "question", "action", "decision", "change", "conflict"].includes(s.kind) && ["needs_review", "concern", "dismissed", "deferred", "clarification", "resolved"].includes(s.status));
+  const sourcesOk = data.sources.every((s) => s && typeof s.id === "string" && typeof s.externalId === "string" && typeof s.threadId === "string" && typeof s.rawText === "string" && typeof s.author === "string" && typeof s.timestamp === "string" && typeof s.timezone === "string" && typeof s.title === "string" && typeof s.locator === "string" && (s.projectId === null || typeof s.projectId === "string") && ["Gmail", "Slack", "iMessage", "Zoom", "Research", "Manual"].includes(s.channel) && ["simulated", "manual"].includes(s.origin) && Array.isArray(s.attachments) && s.attachments.every((a) => typeof a === "string") && (!s.contentDigest || s.contentDigest === digest({ id: s.id, rawText: s.rawText })));
+  const suggestionsOk = data.suggestions.every((s) => s && typeof s.id === "string" && Array.isArray(s.sourceIds) && s.sourceIds.some((id) => sourceIds.has(id)) && s.sourceIds.every((id) => typeof id === "string") && typeof s.excerpt === "string" && typeof s.title === "string" && typeof s.consequence === "string" && typeof s.workArea === "string" && (s.projectId === null || typeof s.projectId === "string") && ["risk", "question", "action", "decision", "change", "conflict"].includes(s.kind) && ["needs_review", "concern", "dismissed", "deferred", "clarification", "resolved"].includes(s.status));
+  return sourcesOk && suggestionsOk && validateOutputs(data.outputs, data) !== null;
 }
 export const ADAPTER_CAPABILITIES: Record<Channel, { readOnly: boolean; attachments: boolean; sourceTypes: string[] }> = {
   Gmail: { readOnly: true, attachments: true, sourceTypes: ["email"] }, Slack: { readOnly: true, attachments: false, sourceTypes: ["thread"] },

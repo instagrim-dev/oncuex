@@ -76,7 +76,7 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
             </h3>
             <p className="text-[12.5px] leading-5 text-muted-foreground">
               This is a fictional launch used to show how OnCueX keeps a complex plan tied to the
-              documents behind it. Reloading restores the prepared venue, documents and sign-offs.
+              documents behind it. Reloading opens the prepared venue and documents after confirmation.
             </p>
             <div className="flex flex-wrap gap-2">
               <DialogClose asChild>
@@ -139,6 +139,7 @@ export function SettingsDialog({ session, onReloadSample }: SettingsDialogProps)
                 </label>
               </Button>
             </div>
+            {session.preservedSamples.length > 0 && <details className="rounded-lg border border-border/60 bg-muted/20 p-3"><summary className="cursor-pointer text-xs font-medium">Preserved plan history ({session.preservedSamples.length})</summary><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Each copy retains the earlier plan, timeline, sign-offs and source reviews on this device. Download a copy and use Restore project data to reopen it.</p><ul className="mt-2 space-y-2">{[...session.preservedSamples].reverse().map((entry) => <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px]"><span>{formatDateTime(entry.savedAt)} · {entry.project.events.length} history entries</span><Button size="sm" variant="outline" onClick={() => session.downloadPreservedSample(entry.id)}>Download preserved record</Button></li>)}</ul></details>}
             <p className="text-[10.5px] text-muted-foreground">
               Export v{exportDoc.exportVersion} · {exportDoc.evidence.length} documents ·{" "}
               {exportDoc.archivedEvidence.length} kept for reference ·{" "}

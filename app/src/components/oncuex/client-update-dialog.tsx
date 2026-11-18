@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Copy, Download, Loader2, Sparkles } from "lucide-react";
+import { Copy, Download, History, Loader2, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,8 @@ import { changeTitle } from "@/oncuex/demo";
 import { BRIEF, PEOPLE } from "@/oncuex/scenario";
 import { formatDate, formatDateTime, formatMoney } from "@/oncuex/format";
 import { planExceptions } from "@/oncuex/presentation";
-import { isDraftStale } from "@/oncuex/source-review";
+import { isOutputStale, outputBasis } from "@/oncuex/retained-output";
+import type { RetainedOutput } from "@/oncuex/retained-output";
 import type { Assessment, Brief } from "@/oncuex/types";
 import { Chip, Note } from "./ui-bits";
 
@@ -40,6 +41,7 @@ export function ClientUpdateDialog({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [draftBasis, setDraftBasis] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const store = session.store;
   const snapshot = store.snapshot();
@@ -47,8 +49,24 @@ export function ClientUpdateDialog({
   const brief: Brief = briefReady ? (snapshot.brief as Brief) : BRIEF;
   const concerns = session.review.data.suggestions.filter((item) => item.status === "concern" && item.projectId === snapshot.id);
   const citedSources = session.review.data.sources.filter((source) => concerns.some((item) => item.sourceIds.includes(source.id)));
-  const basis = JSON.stringify({ revision: store.assessmentRevision, now: store.now(), decisions: store.decisionsList(), sourceReview: session.review.data });
-  const stale = isDraftStale(draft, draftBasis, basis);
+  const basis = outputBasis({ revision: store.assessmentRevision, now: store.now(), decisions: store.decisionsList(), sources: session.review.data.sources, suggestions: session.review.data.suggestions });
+  const stale = Boolean(draft && draftBasis && draftBasis !== basis);
+  const savedOutputs = [...(session.review.data.outputs ?? [])]
+    .filter((output) => output.projectId === snapshot.id)
+    .sort((a, b) => b.version - a.version);
+  const loadOutput = (output: RetainedOutput) => {
+    setDraft(output.body); setDraftBasis(output.basis); setMode("manual"); setError(null);
+    setSaveNotice(isOutputStale(output, basis) ? "Loaded an earlier version. It is stale against the current record; prepare a new version before reuse." : "Loaded the saved version.");
+  };
+  const saveOutput = () => {
+    if (!draft.trim() || stale || draftWarnings.length > 0) return;
+    try {
+      const saved = session.review.saveOutput({ projectId: snapshot.id, title: `Client update · ${brief.project}`, body: draft, sourceIds: citedSources.map((source) => source.id), concernIds: concerns.map((item) => item.id), basis });
+      setSaveNotice(`Saved as version ${saved.version}. The saved copy is unchanged until you save another version.`);
+    } catch (failure) {
+      setSaveNotice(failure instanceof Error ? failure.message : "The output could not be saved.");
+    }
+  };
   const citations = citedSources.map((source) => `[${source.id}] ${source.channel} · ${source.author} · ${formatDateTime(source.timestamp)} · ${source.origin}: “${source.rawText}”`).join("\n");
   const latest = store.latestDecision();
   const latestCurrent = latest ? store.currentness(latest.id) === "current" : false;
@@ -140,7 +158,7 @@ export function ClientUpdateDialog({
   const prepareFromRecord = () => {
     const lines = [
       `Working update for ${brief.client} — ${brief.project}`, "",
-      `The current plan records ${snapshot.location.venueName} for ${formatDate(brief.eventDate)}. The approved ceiling is ${formatMoney(brief.approvedBudget.minorUnits, brief.approvedBudget.currency)}; recorded commitments total ${formatMoney(snapshot.budget.committedTotal.minorUnits, snapshot.budget.committedTotal.currency)}.`,
+      `The current plan records ${snapshot.location.venueId === "UNASSIGNED" ? "no venue yet" : snapshot.location.venueName} for ${formatDate(brief.eventDate)}. The approved ceiling is ${formatMoney(brief.approvedBudget.minorUnits, brief.approvedBudget.currency)}; recorded commitments total ${formatMoney(snapshot.budget.committedTotal.minorUnits, snapshot.budget.committedTotal.currency)}.`,
       latestCurrent ? "The current plan has a recorded sign-off." : "The current plan is not signed off.",
       concerns.length ? `Open concerns for follow-up: ${concerns.map((item) => `${item.title} [${item.sourceIds.join(", ")}]`).join("; ")}. These are concerns, not verified facts or adopted changes.` : "No source concerns have been accepted for follow-up.",
       brief.openQuestions.length ? `Open questions: ${brief.openQuestions.join("; ")}` : "No client questions are recorded in the brief.",
@@ -148,7 +166,7 @@ export function ClientUpdateDialog({
       citations ? `\nSources for review:\n${citations}` : "",
     ];
     setDraft(lines.filter((line) => line !== undefined).join("\n"));
-    setDraftBasis(basis); setMode("manual"); setError(null);
+    setDraftBasis(basis); setMode("manual"); setError(null); setSaveNotice(null);
   };
 
   const download = () => {
@@ -268,6 +286,21 @@ export function ClientUpdateDialog({
               </Note>
             )}
 
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" className="gap-1.5" disabled={!draft.trim() || draftWarnings.length > 0 || stale} onClick={saveOutput}>
+                <Save className="size-3.5" />
+                Save reviewed version
+              </Button>
+              <span className="text-[10.5px] text-muted-foreground">Saved on this device with the project; not sent.</span>
+            </div>
+            {saveNotice && <Note tone="neutral">{saveNotice}</Note>}
+            <div className="rounded-lg border border-border/60 p-3">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold"><History className="size-3.5" aria-hidden />Retained updates · {savedOutputs.length}</p>
+              {savedOutputs.length === 0 ? <p className="mt-1 text-[10.5px] text-muted-foreground">No saved version yet. Review the draft, then save it for reuse and export.</p> : <ul className="mt-2 space-y-1.5">{savedOutputs.map((output) => {
+                const outputStale = isOutputStale(output, basis);
+                return <li key={output.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2.5 py-2 text-[10.5px]"><div className="min-w-0"><p className="font-medium">Version {output.version} · {formatDate(output.savedAt)}</p><p className="text-muted-foreground">{outputStale ? "Stale: the plan or review record changed. Kept unchanged." : "Current basis"} · {output.sourceIds.length} cited source{output.sourceIds.length === 1 ? "" : "s"}</p></div><Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => loadOutput(output)}>Load</Button></li>;
+              })}</ul>}
+            </div>
             <p className="text-[10.5px] text-muted-foreground">
               This is a draft. Send it your own way when it sounds right.
             </p>

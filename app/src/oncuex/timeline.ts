@@ -32,7 +32,7 @@ export function timelineEntries(store: Store): TimelineEntry[] {
           key: event.id,
           title: source ? `Paperwork added: ${sourceAttribution(source)}` : "New paperwork",
           detail: source
-            ? `${actor} · received ${formatDate(source.observedAt)}`
+            ? `${actor} · received ${formatDate(source.observedAt)} · For check: ${store.requirements.find((requirement) => requirement.id === source.requirementId)?.label ?? source.requirementId} (${source.id})`
             : `${actor} added paperwork to the plan.`,
         };
       }
@@ -44,14 +44,12 @@ export function timelineEntries(store: Store): TimelineEntry[] {
           key: event.id,
           title:
             disposition === "accepted"
-              ? `Paperwork reviewed and current: ${name}`
+              ? `Paperwork reviewed: ${name}`
               : disposition === "rejected"
                 ? `Paperwork marked for a new version: ${name}`
                 : `Paperwork sent back for a look: ${name}`,
           detail:
-            disposition === "accepted"
-              ? `${actor} reviewed it as current.`
-              : `${actor} marked it for a new version.`,
+            `${actor} · For check: ${source ? store.requirements.find((requirement) => requirement.id === source.requirementId)?.label ?? source.requirementId : "not recorded"}${source ? ` (${source.id})` : ""} · ${disposition === "accepted" ? "reviewed as current at the time" : disposition === "rejected" ? "marked for a new version" : "review pending"}.`,
         };
       }
       case "change.adopted": {

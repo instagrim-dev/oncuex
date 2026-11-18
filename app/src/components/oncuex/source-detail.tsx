@@ -1,0 +1,27 @@
+import { FileText, Mail, MessageCircle, Video } from "lucide-react";
+import type { SourceItem } from "@/oncuex/source-review";
+import { formatDateTime } from "@/oncuex/format";
+import { formatSourceTime, transcriptLines } from "@/oncuex/source-display";
+
+interface SourceDetailProps { source: SourceItem; related: SourceItem[] }
+
+function SourceTimestamp({ source }: { source: SourceItem }) {
+  return <div className="text-[11px] leading-5 text-muted-foreground"><p>Source local time: {formatSourceTime(source.timestamp, source.timezone)}</p><details><summary className="cursor-pointer underline-offset-2 hover:underline">Show UTC</summary><p>{formatDateTime(source.timestamp)}</p></details></div>;
+}
+
+function EmailDetail({ source, related }: SourceDetailProps) {
+  return <div className="space-y-3"><div className="flex items-start gap-2 border-b border-border/70 pb-3"><Mail className="mt-1 size-4 shrink-0 text-primary" aria-hidden /><div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Email thread · simulated</p><h3 className="mt-1 font-serif text-xl leading-tight">{source.title}</h3></div></div><div className="rounded-lg border border-border bg-card p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold">{source.author}</p><p className="text-[11px] text-muted-foreground">To: recipients not recorded</p></div></div><div className="mt-1"><SourceTimestamp source={source} /></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6">{source.rawText}</p></div>{related.length > 0 ? <div className="space-y-2"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{source.supersedes ? "Earlier message" : "Related correction"} · separate source record</p>{related.map((item) => <div key={item.id} className="rounded-lg border border-border/70 bg-muted/30 p-3"><p className="text-xs font-semibold">{item.author} · {item.title}</p><SourceTimestamp source={item} /><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.rawText}</p><p className="mt-2 text-[10px] text-muted-foreground">Shown for context only; import this record separately.</p></div>)}</div> : <p className="text-[11px] text-muted-foreground">No other replies are recorded in this source.</p>}</div>;
+}
+
+function MessageDetail({ source }: { source: SourceItem }) {
+  return <div className="space-y-3"><div className="flex items-center gap-2 border-b border-border/70 pb-3"><MessageCircle className="size-4 text-primary" aria-hidden /><div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">iMessage · simulated</p><h3 className="font-serif text-xl">{source.title}</h3></div></div><SourceTimestamp source={source} /><div className="flex justify-start"><div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-secondary px-4 py-3 text-secondary-foreground"><p className="mb-1 text-[10px] font-semibold">{source.author}</p><p className="whitespace-pre-wrap text-sm leading-6">{source.rawText}</p></div></div><p className="text-[11px] text-muted-foreground">No other messages are recorded in this source.</p></div>;
+}
+
+function ZoomDetail({ source }: { source: SourceItem }) {
+  const lines = transcriptLines(source.rawText);
+  return <div className="space-y-3"><div className="flex items-center gap-2 border-b border-border/70 pb-3"><Video className="size-4 text-primary" aria-hidden /><div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Meeting excerpt · simulated</p><h3 className="font-serif text-xl">{source.title}</h3></div></div><SourceTimestamp source={source} /><p className="text-[11px] text-muted-foreground">Transcript offsets are relative to the fictional discussion; no recording is connected.</p>{lines.length ? <ol className="divide-y divide-border/70 rounded-lg border border-border bg-card">{lines.map((line, index) => <li key={`${line.offset}-${index}`} className="grid grid-cols-[3rem_1fr] gap-2 p-3"><span className="tnum text-[11px] font-semibold text-primary">{line.offset}</span><div><p className="text-xs font-semibold">{line.speaker}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6">{line.text}</p></div></li>)}</ol> : <p className="whitespace-pre-wrap text-sm leading-6">{source.rawText}</p>}</div>;
+}
+
+export function SourceDetail({ source, related }: SourceDetailProps) {
+  return <div className="space-y-3"><div className="text-[10px] font-semibold uppercase tracking-wider text-primary">{source.channel} · {source.origin === "manual" ? "Manually entered" : "Simulated source"}</div>{source.channel === "Gmail" ? <EmailDetail source={source} related={related} /> : source.channel === "iMessage" ? <MessageDetail source={source} /> : source.channel === "Zoom" ? <ZoomDetail source={source} /> : <div className="space-y-2"><h3 className="font-serif text-xl">{source.title}</h3><p className="text-xs text-muted-foreground">{source.author}</p><SourceTimestamp source={source} /><p className="whitespace-pre-wrap text-sm leading-6">{source.rawText}</p></div>}<p className="text-xs text-muted-foreground">{source.projectId ? "Sample project association" : "Project association uncertain"}{source.supersedes ? ` · Corrects ${source.supersedes}` : ""}</p>{source.attachments.map((attachment) => <p key={attachment} className="rounded-md border border-border p-2 text-xs text-muted-foreground"><FileText className="mr-1 inline size-3.5" aria-hidden />{attachment}</p>)}</div>;
+}

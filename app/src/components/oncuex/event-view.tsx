@@ -1,10 +1,17 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  CircleHelp,
+  ClipboardCheck,
   Clock3,
+  FileCheck2,
+  FileClock,
   MapPin,
+  ShieldAlert,
+  ShieldCheck,
   Users,
   Wallet,
 } from "lucide-react";
@@ -13,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import type { useOperatorSession } from "@/hooks/use-operator-session";
 import { timelineEntries } from "@/oncuex/timeline";
 import { changeTitle } from "@/oncuex/demo";
-import { BRIEF, CONTRIBUTORS, PEOPLE, REQUIREMENTS } from "@/oncuex/scenario";
+import { BRIEF, CONTRIBUTORS, PEOPLE } from "@/oncuex/scenario";
 import {
   checklistState,
   countdownLabel,
@@ -24,6 +31,8 @@ import { formatDate, formatMoney } from "@/oncuex/format";
 import type { Assessment, Brief } from "@/oncuex/types";
 import { UpdateEventDialog } from "./update-event-dialog";
 import { Chip, Panel } from "./ui-bits";
+import { IssueDialog } from "./issue-dialog";
+import type { IssueSelection } from "./issue-dialog";
 
 interface EventViewProps {
   session: ReturnType<typeof useOperatorSession>;
@@ -46,8 +55,8 @@ export function EventView({
   onOpenSignOff,
   onReviewBrief,
   onOpenClientUpdate,
-  onOpenTarget,
 }: EventViewProps) {
+  const [issue, setIssue] = useState<IssueSelection | null>(null);
   const store = session.store;
   const snapshot = store.snapshot();
   const briefReady = Boolean((snapshot.brief as { client?: string }).client);
@@ -82,7 +91,7 @@ export function EventView({
 
   const openQuestions = brief.openQuestions ?? [];
   const nextTasks = open.slice(0, 3).map((result) => {
-    const requirement = REQUIREMENTS.find(
+    const requirement = store.requirements.find(
       (candidate) => candidate.id === result.requirementId,
     );
     return {
@@ -142,7 +151,7 @@ export function EventView({
                 className="h-8 text-[11.5px]"
                 onClick={onOpenClientUpdate}
               >
-                Client update
+                Client update{(session.review.data.outputs ?? []).filter((output) => output.projectId === snapshot.id).length > 0 ? ` · ${(session.review.data.outputs ?? []).filter((output) => output.projectId === snapshot.id).length} saved` : ""}
               </Button>
             </div>
           </div>
@@ -150,15 +159,33 @@ export function EventView({
           {briefReady && <p className="text-[11px] text-muted-foreground">
             Event lead {PEOPLE[brief.owner.id] ?? brief.owner.name} ·{" "}
             {CONTRIBUTORS.map((person) => PEOPLE[person.id] ?? person.name).join(" and ")} producing
+            {snapshot.location.venueId === "UNASSIGNED" ? " · venue, schedule and commitments are not recorded yet" : ""}
           </p>}
           <p className="text-[10px] text-muted-foreground">
             Sample event · simulated role · saved on this device · no authentication
           </p>
-          <p className="text-[10px] text-muted-foreground">
-            {!briefReady || !assessment
-              ? "Plan not checked yet"
-              : `${supportingPass} of ${assessment.requirements.length} supporting checks pass · ${brief.openQuestions.length} questions open · ${assessment.readiness === "ready_for_review" ? "ready for review" : "not ready for review"} · ${latestCurrent ? "current sign-off" : "not signed off"}`}
-          </p>
+          {!briefReady || !assessment ? (
+            <Chip tone="neutral"><Clock3 className="size-3.5" aria-hidden />Plan not checked yet</Chip>
+          ) : (
+            <div className="flex flex-wrap gap-1.5" aria-label="Plan status">
+              <Chip tone={supportingPass === assessment.requirements.length ? "success" : "warning"}>
+                <ClipboardCheck className="size-3.5" aria-hidden />
+                {supportingPass} of {assessment.requirements.length} supporting checks pass
+              </Chip>
+              <Chip tone={openQuestions.length ? "warning" : "neutral"}>
+                <CircleHelp className="size-3.5" aria-hidden />
+                {openQuestions.length} {openQuestions.length === 1 ? "question" : "questions"} open
+              </Chip>
+              <Chip tone={assessment.readiness === "ready_for_review" ? "success" : "warning"}>
+                {assessment.readiness === "ready_for_review" ? <ShieldCheck className="size-3.5" aria-hidden /> : <ShieldAlert className="size-3.5" aria-hidden />}
+                {assessment.readiness === "ready_for_review" ? "Ready for review" : "Not ready for review"}
+              </Chip>
+              <Chip tone={latestCurrent ? "success" : "neutral"}>
+                {latestCurrent ? <FileCheck2 className="size-3.5" aria-hidden /> : <FileClock className="size-3.5" aria-hidden />}
+                {latestCurrent ? "Current sign-off" : "Not signed off"}
+              </Chip>
+            </div>
+          )}
 
           {lastChange && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[11.5px] leading-5 text-warning">
@@ -248,12 +275,13 @@ export function EventView({
                         <Clock3 className="size-4 text-warning" />
                       )}
                     </span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-[12.5px] font-medium leading-5">{task.title}</p>
                       <p className="text-[11px] leading-4 text-muted-foreground">
                         {task.owner}
                         {task.state.detail ? ` · ${task.state.detail}` : ""}
                       </p>
+                      <button type="button" className="mt-1 text-[11px] font-medium text-primary underline underline-offset-4" onClick={() => setIssue({ kind: "requirement", id: task.key, title: task.title })}>Review and resolve</button>
                     </div>
                   </li>
                 ))}
@@ -269,6 +297,7 @@ export function EventView({
                     <span className="ml-1 text-[10.5px] text-muted-foreground">
                       Open with {PEOPLE[brief.owner.id] ?? brief.owner.name}
                     </span>
+                    <button type="button" className="ml-2 text-[11px] font-medium text-primary underline underline-offset-4" onClick={() => setIssue({ kind: "question", id: question, title: question })}>Prepare clarification</button>
                   </li>
                 ))}
               </ul>
@@ -315,7 +344,7 @@ export function EventView({
                         </p>
                         <button
                           type="button"
-                          onClick={() => onOpenTarget(exception.tab, exception.anchor)}
+                          onClick={() => setIssue({ kind: "exception", id: exception.id, title: exception.title, detail: exception.detail })}
                           className="mt-0.5 text-[10.5px] underline underline-offset-4 text-muted-foreground hover:text-foreground"
                         >
                           Fix this
@@ -400,6 +429,7 @@ export function EventView({
           </Panel>
         </div>
       </div>
+      <IssueDialog key={issue ? `${issue.kind}-${issue.id}` : "closed"} issue={issue} session={session} assessment={assessment} onClose={() => setIssue(null)} />
     </div>
   );
 }

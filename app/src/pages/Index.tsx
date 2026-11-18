@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { LegacySourcesDialog } from "@/components/oncuex/legacy-sources-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TimelineSheet } from "@/components/oncuex/timeline-sheet";
 import { ActivityDialog, SourcesDialog } from "@/components/oncuex/source-activity";
@@ -42,6 +44,8 @@ const Index = () => {
   const review = session.review;
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [legacySourcesOpen, setLegacySourcesOpen] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
   const [tab, setTab] = useState("overview");
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [signOffOpen, setSignOffOpen] = useState(false);
@@ -68,6 +72,7 @@ const Index = () => {
 
   const store = session.store;
   const briefReady = isBriefAdopted(store.snapshot());
+  const legacySources = store.evidence.filter(flawedLegacySample);
 
   let assessment: Assessment | null = null;
   let eligibility: Eligibility | null = null;
@@ -107,7 +112,7 @@ const Index = () => {
         session={session}
         onOpenSignOff={() => setSignOffOpen(true)}
         onOpenTimeline={() => setTimelineOpen(true)}
-        onReloadSample={session.reloadSample}
+        onReloadSample={() => setConfirmReload(true)}
         theme={theme}
         onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       />
@@ -124,8 +129,15 @@ const Index = () => {
             </div>
           )}
 
-          {store.evidence.some(flawedLegacySample) && (
-            <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs leading-5">This saved record contains earlier sample excerpts with known source inconsistencies. Its history has been preserved; review or export it before reloading the corrected sample. Affected checks and sign-offs are treated as needing review rather than relying on those excerpts.</div>
+          {legacySources.length > 0 && (
+            <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-3 text-xs leading-5">
+              <p>This saved record contains earlier sample excerpts that do not support their checks. The originals and history remain intact; affected checks and sign-offs need review.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setLegacySourcesOpen(true)}>Review affected sources</Button>
+                <Button size="sm" variant="outline" onClick={session.downloadExport}>Export saved record</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirmReload(true)}>Load corrected sample</Button>
+              </div>
+            </div>
           )}
           {session.error && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12.5px] leading-5 text-destructive">
@@ -248,6 +260,14 @@ const Index = () => {
         </span>
       </footer>
 
+      <LegacySourcesDialog open={legacySourcesOpen} onOpenChange={setLegacySourcesOpen} records={legacySources} requirements={store.requirements} onOpenCheck={(id) => { setLegacySourcesOpen(false); openTarget("checklist", `checklist-${id}`); }} />
+      <AlertDialog open={confirmReload} onOpenChange={setConfirmReload}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Load the corrected sample?</AlertDialogTitle><AlertDialogDescription>The current plan will be replaced by the prepared sample. Its full record, source reviews and history will first be preserved on this device and available to download from Settings. Source reviews remain in the current workspace. Export a copy for safekeeping; this is not shared storage.</AlertDialogDescription></AlertDialogHeader>
+          {session.error?.startsWith("The sample was not loaded.") && <p className="text-xs leading-5 text-destructive">{session.error}</p>}
+          <AlertDialogFooter><AlertDialogCancel>Keep current plan</AlertDialogCancel><Button variant="outline" onClick={session.downloadExport} disabled={!briefReady}>Export saved record</Button><Button onClick={() => { if (session.reloadSample()) setConfirmReload(false); }}>Preserve and load sample</Button></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <SourcesDialog review={review} open={sourcesOpen} onOpenChange={setSourcesOpen} onActivity={() => { setSourcesOpen(false); setActivityOpen(true); }} />
       <ActivityDialog review={review} open={activityOpen} onOpenChange={setActivityOpen} projectId={store.snapshot().id} revision={store.assessmentRevision} history={timelineEntries(store).map((item) => `${item.title} · ${item.detail}`)} onSources={() => { setActivityOpen(false); setSourcesOpen(true); }} onWork={() => { setActivityOpen(false); setTab("checklist"); }} />
       <TimelineSheet

@@ -108,8 +108,14 @@ export const residualText = (residual: Residual): string => {
       return "No paperwork for this yet.";
     case "evidence_expired":
       return "This paperwork has expired.";
-    case "source_excerpt_inconsistent":
-      return "This earlier sample excerpt does not support the recorded check and needs a corrected source.";
+    case "source_excerpt_inconsistent": {
+      const guidance: Record<string, string> = {
+        "EV-6": "The Foundry Hall venue pack lists occupancy, but does not contain a fire and occupancy attestation. Review the preserved record and obtain an attestation for the venue before relying on this check.",
+        "EV-4": "The production note describes crew arrival, not the run-of-show end time. Review the preserved note and obtain a schedule showing the show end and venue hard stop.",
+        "EV-7": "The earlier photography scope states a $240,000 fee, while the sample agreement states $2,400. Review the discrepancy against the current commitment and obtain a corrected scope or agreement before relying on this check.",
+      };
+      return guidance[residual.evidenceId ?? ""] ?? "The recorded source does not support this check. Review the excerpt and obtain a source that addresses the requirement before relying on it.";
+    }
     case "bound_field_changed":
       return "The plan moved after this came in.";
     case "predicate_false":

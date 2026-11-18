@@ -47,6 +47,10 @@ export function ItineraryView({ session, onStartSample, onOpenTab }: ItineraryVi
     );
   }
 
+  if (snapshot.location.venueId === "UNASSIGNED") {
+    return <Panel eyebrow="Itinerary" title="The event day is not recorded yet" description="Venue access, crew call, run of show and hard stop are unknown for this new event."><EmptyState icon={CalendarDays} title="No event-day timings" description="Add a confirmed venue and schedule before assessing the running order. Nothing has been filled from the sample." action={<Button size="sm" variant="outline" onClick={() => onOpenTab("checklist")}>Open the checklist</Button>} /></Panel>;
+  }
+
   const setup =
     (REQUIREMENTS.find((requirement) => requirement.id === "REQ-venue-loading-1")
       ?.expectedValues?.setupMinutes as number | undefined) ?? 45;

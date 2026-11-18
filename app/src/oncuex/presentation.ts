@@ -181,14 +181,19 @@ export function planExceptions(
   }
 
   if (assessment) {
-    const stale = assessment.requirements.filter(
-      (result) => result.status === "outdated",
-    ).length;
-    if (stale > 0) {
+    const codes = ["source_excerpt_inconsistent", "bound_field_changed", "evidence_expired"];
+    const affected = assessment.requirements.filter((result) => result.status === "outdated" || result.residuals.some((residual) => codes.includes(residual.code)));
+    if (affected.length) {
+      const findings = new Set(affected.flatMap((result) => result.residuals.map((residual) => residual.code)));
+      const explanations = [
+        findings.has("source_excerpt_inconsistent") && "An earlier sample excerpt does not support its check; review it and obtain a suitable source.",
+        findings.has("bound_field_changed") && "Some documents no longer match plan details that changed after receipt.",
+        findings.has("evidence_expired") && "Some documents have expired and need a current version.",
+      ].filter(Boolean);
       exceptions.push({
         id: "documents",
-        title: `${stale} checklist item${stale === 1 ? "" : "s"} need an update`,
-        detail: "The plan moved after the documents behind them were received.",
+        title: `${affected.length} checklist item${affected.length === 1 ? "" : "s"} need attention`,
+        detail: explanations.join(" ") || "Review the supporting documents and their findings.",
         tab: "checklist",
         anchor: "checklist-support",
       });

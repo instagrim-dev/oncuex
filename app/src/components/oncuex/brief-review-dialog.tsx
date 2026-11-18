@@ -81,17 +81,19 @@ export function BriefReviewDialog({
   const [proposal, setProposal] = useState<BriefProposal | null>(null);
   const [mode, setMode] = useState<"ai" | "manual" | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [briefText, setBriefText] = useState(SAMPLE_BRIEF_TEXT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmNewEvent, setConfirmNewEvent] = useState(false);
 
   const missingSpans = useMemo(() => {
     if (!proposal || mode !== "ai") return [];
-    const present = new Set(proposal.sourceSpans.filter((span) => span.quote.trim().length > 0 && SAMPLE_BRIEF_TEXT.includes(span.quote)).map((span) => span.field));
+    const present = new Set(proposal.sourceSpans.filter((span) => span.quote.trim().length > 0 && briefText.includes(span.quote)).map((span) => span.field));
     return PROPOSAL_FIELDS.filter((field) => {
       const value = proposal[field as keyof BriefProposal];
       return value !== null && !present.has(field);
     });
-  }, [proposal, mode]);
+  }, [proposal, mode, briefText]);
 
   const missing = [
     !form.client.trim() && "client",
@@ -103,19 +105,20 @@ export function BriefReviewDialog({
   ].filter(Boolean) as string[];
 
   const matchesPreparedBinder = form.client.trim() === BRIEF.client && form.project.trim() === BRIEF.project && form.eventDate === BRIEF.eventDate && Number(form.guestCount) === BRIEF.guestCount && Math.round(Number(form.budget) * 100) === BRIEF.approvedBudget.minorUnits;
-  const canAdopt =
-    missing.length === 0 && matchesPreparedBinder &&
-    (mode === "manual" || missingSpans.length === 0);
+  const isPreparedSample = matchesPreparedBinder && briefText.trim() === SAMPLE_BRIEF_TEXT.trim();
+  const canAdopt = Boolean(proposal) && missing.length === 0 && (mode === "manual" || missingSpans.length === 0) && (isPreparedSample || (briefText.trim().length >= 40 && briefText.trim() !== SAMPLE_BRIEF_TEXT.trim() && confirmNewEvent));
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
   const extract = async () => {
+    if (briefText.trim().length < 40) { setError("Paste at least a short paragraph of the original brief before reading it."); return; }
     setLoading(true);
     setError(null);
+    setConfirmNewEvent(false);
     const result = await callOncuexAI<BriefProposal>("extract_brief", {
-      briefText: SAMPLE_BRIEF_TEXT,
+      briefText,
     });
     setLoading(false);
     if (!result.ok) {
@@ -132,7 +135,18 @@ export function BriefReviewDialog({
     setMode("ai");
   };
 
+  const enterManually = () => {
+    const manual: BriefProposal = {
+      client: "", project: "", eventDate: "", guestCount: null, approvedBudget: null,
+      timezone: "", openQuestions: [], sourceSpans: [], uncertainties: ["Typed by you from the original brief."], questions: [],
+    };
+    if (briefText.trim() === SAMPLE_BRIEF_TEXT.trim()) setBriefText("");
+    setProposal(manual); setForm(emptyForm); setMode("manual"); setError(null); setConfirmNewEvent(false);
+  };
+
   const useManualSample = () => {
+    setBriefText(SAMPLE_BRIEF_TEXT);
+    setConfirmNewEvent(false);
     const manual: BriefProposal = {
       client: BRIEF.client,
       project: BRIEF.project,
@@ -173,13 +187,21 @@ export function BriefReviewDialog({
         .filter(Boolean),
       circulationBuffer: Number.isFinite(buffer) ? buffer : 10,
     };
-    session.apply("Brief adopted", (current) => {
-      adoptReviewedBrief(current, brief);
-      const isSample = brief.client === BRIEF.client && brief.project === BRIEF.project && brief.eventDate === BRIEF.eventDate && brief.guestCount === BRIEF.guestCount && brief.approvedBudget.minorUnits === BRIEF.approvedBudget.minorUnits;
-      if (isSample) attachBaselineEvidence(current);
-      return isSample ? "The brief is adopted and the prepared sample documents are attached." : "The brief is adopted. Sample documents were not attached to this project.";
-    });
-    onOpenChange(false);
+    if (isPreparedSample) {
+      session.apply("Brief adopted", (current) => {
+        adoptReviewedBrief(current, brief);
+        attachBaselineEvidence(current);
+        return "The brief is adopted and the prepared sample documents are attached.";
+      });
+      onOpenChange(false);
+      return;
+    }
+    const result = session.startNewEvent(brief, briefText);
+    if (result.ok) {
+      onOpenChange(false);
+    } else {
+      setError(result.detail);
+    }
   };
 
   return (
@@ -197,9 +219,10 @@ export function BriefReviewDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <Note tone="warning">This binder currently contains the prepared fictional venue and budget. Only the matching sample brief can be adopted safely; other project details remain unsupported rather than inheriting sample commitments.</Note>
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-[12px] leading-5">
-            {SAMPLE_BRIEF_TEXT}
+          <div className="space-y-1.5">
+            <Label htmlFor="brief-source">Original client brief</Label>
+            <Textarea id="brief-source" rows={5} value={briefText} onChange={(event) => { setBriefText(event.target.value); setConfirmNewEvent(false); }} placeholder="Paste the client’s original brief. It is retained as the source for this event." className="text-[12px] leading-5" />
+            <p className="text-[10px] text-muted-foreground">The original stays with the event. Edit the reviewed fields below; do not rewrite the source.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -212,16 +235,19 @@ export function BriefReviewDialog({
               {mode === "ai" ? "Read it again" : "Read the brief"}
             </Button>
             {mode === "ai" && <Chip tone="success">Read from the brief</Chip>}
-            {mode === "manual" && <Chip tone="neutral">Typed by you</Chip>}
-            <Button size="sm" variant="ghost" onClick={useManualSample} disabled={loading}>
-              Fill it in myself
+            {mode === "manual" && <Chip tone="neutral">Reviewed by you</Chip>}
+            <Button size="sm" variant="outline" onClick={useManualSample} disabled={loading}>
+              Use prepared sample
+            </Button>
+            <Button size="sm" variant="ghost" onClick={enterManually} disabled={loading}>
+              Enter manually
             </Button>
           </div>
 
           {error && (
             <Note tone="danger" icon={FileText}>
               <span className="font-medium">We couldn’t read the brief automatically.</span>{" "}
-              {error} You can type the details in yourself or use the prepared sample.
+              {error} You can enter the reviewed fields manually. No values are adopted without review.
             </Note>
           )}
 
@@ -284,7 +310,7 @@ export function BriefReviewDialog({
                     onChange={(event) => update("timezone", event.target.value)}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    We set this for the sample. Edit it if needed.
+                    Used for the new event’s source time and clock.
                   </p>
                 </div>
               </div>
@@ -321,11 +347,11 @@ export function BriefReviewDialog({
                     onChange={(event) => update("circulationBuffer", event.target.value)}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    We set this for the sample.
+                    A planning assumption; change it if the client specified otherwise.
                   </p>
                 </div>
                 <p className="self-end text-[10.5px] text-muted-foreground">
-                  {BRIEF.owner.name} is the event lead on this sample.
+                  {BRIEF.owner.name} is the simulated event lead for this prototype.
                 </p>
               </div>
 
@@ -387,9 +413,15 @@ export function BriefReviewDialog({
                 </p>
               )}
 
+              {!isPreparedSample && <div className="space-y-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2">
+                <p className="text-[11px] leading-5">This will start a new event with the reviewed fields above. The current plan and its history will be preserved on this device first. No sample venue, documents, commitments or confirmations will be attached; they remain unrecorded until you add suitable sources.</p>
+                <label className="flex items-start gap-2 text-[11px] leading-5">
+                  <input type="checkbox" className="mt-0.5" checked={confirmNewEvent} onChange={(event) => setConfirmNewEvent(event.target.checked)} />
+                  <span>Start a new event and keep this original brief as its source.</span>
+                </label>
+              </div>}
               <Note tone="neutral" icon={CheckCircle2}>
-                Using this brief adds it to the plan and attaches the sample paperwork. The
-                paperwork is prepared for the sample, not a live partner confirmation.
+                {isPreparedSample ? "This matching sample brief reopens the prepared fictional binder and its paperwork. It is not a live partner confirmation." : "Reviewed fields are adopted into a new event record. The original brief and the new event stay on this device; no external action is taken."}
               </Note>
             </div>
           )}
@@ -400,7 +432,7 @@ export function BriefReviewDialog({
             Cancel
           </Button>
           <Button size="sm" className="gap-1.5" disabled={!proposal || !canAdopt} onClick={adopt}>
-            Use this brief and add the sample paperwork
+            {isPreparedSample ? "Use this brief and add the sample paperwork" : "Start a new event from this brief"}
             <ArrowRight className="size-3.5" />
           </Button>
         </DialogFooter>

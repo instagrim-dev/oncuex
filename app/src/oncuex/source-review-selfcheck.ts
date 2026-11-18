@@ -3,6 +3,16 @@ import { digest } from "./schema";
 import { Store } from "./store";
 import { initialProject, REQUIREMENTS } from "./scenario";
 import { adoptRecovery, adoptVenueChange, attachRecoveryEvidence, loadBaseline, recordAcceptance } from "./demo";
+import { formatSourceTime, transcriptLines } from "./source-display";
+import { planExceptions } from "./presentation";
+import { preserveSample, readPreservedSamples } from "./sample-archive";
+import { timelineEntries } from "./timeline";
+import type { Brief } from "./types";
+import { issueEditor, previewIssueChange, proposedFields } from "./issue-resolution";
+import { residualText } from "./format";
+import { newEventProject } from "./new-event";
+import { isOutputStale, nextOutput, outputBasis, validateOutputs } from "./retained-output";
+import type { RetainedOutput } from "./retained-output";
 
 export function runSourceReviewChecks(): { label: string; ok: boolean }[] {
   const checks: { label: string; ok: boolean }[] = [];
@@ -47,5 +57,72 @@ export function runSourceReviewChecks(): { label: string; ok: boolean }[] {
   const old = store.evidence.find((e) => e.id === "EV-6")!;
   old.sourceRefIds = ["SRC-2"]; old.sourceExcerpt = "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD."; old.contentDigest = digest({ sourceRefIds: old.sourceRefIds, sourceExcerpt: old.sourceExcerpt });
   check("Legacy unsupported attestation is preserved but not treated as current support", store.assess().requirements.find((r) => r.requirementId === "REQ-fire-permit-1")?.status === "outdated" && store.currentness("DEC-1") === "historical" && old.sourceExcerpt.includes("licensed occupancy"));
+  check("Inconsistent source guidance identifies the problem and next step", residualText({ code: "source_excerpt_inconsistent", evidenceId: "EV-6" }).includes("attestation") && residualText({ code: "source_excerpt_inconsistent", evidenceId: "EV-4" }).includes("run-of-show") && residualText({ code: "source_excerpt_inconsistent", evidenceId: "EV-7" }).includes("$240,000") && residualText({ code: "source_excerpt_inconsistent" }).includes("Review the excerpt"));
+  const legacyException = planExceptions(store.snapshot(), store.snapshot().brief as Brief, store.assess()).find((entry) => entry.id === "documents");
+  check("Overview explains unsupported source without inventing a plan change", !!legacyException && legacyException.detail.includes("does not support") && !legacyException.detail.includes("changed after receipt"));
+  const changedAssessment = structuredClone(store.assess());
+  changedAssessment.requirements[0].status = "outdated";
+  changedAssessment.requirements[0].residuals = [{ code: "bound_field_changed" }, { code: "evidence_expired" }];
+  const combined = planExceptions(store.snapshot(), store.snapshot().brief as Brief, changedAssessment).find((entry) => entry.id === "documents");
+  check("Mixed source, change and expiry findings remain distinct", !!combined && combined.detail.includes("does not support") && combined.detail.includes("changed after receipt") && combined.detail.includes("expired"));
+  const history = timelineEntries(store);
+  check("Repeated source events identify checks without removing events", history.length === store.events.length && history.filter((entry) => entry.title.includes("Venue pack, Foundry Hall")).every((entry) => entry.detail.includes("For check:")));
+  const zoom = SAMPLE_SOURCES.find((source) => source.id === "zoom-followup")!;
+  const transcript = transcriptLines(zoom.rawText);
+  check("Transcript uses recorded speakers and offsets only", transcript.length === 2 && transcript[0].speaker === "Rowan" && transcript[0].offset === "00:12" && transcript[1].speaker === "Priya" && transcript[1].offset === "00:19" && transcriptLines("No speaker markers").length === 0);
+  check("Source time uses its timezone and handles invalid zones honestly", formatSourceTime("2027-02-24T17:00:00Z", "America/Los_Angeles").includes("09:00") && formatSourceTime("2027-02-24T17:00:00Z", "Bad/Zone").includes("source timezone unavailable"));
+  let archive: string | null = null;
+  const storage = { getItem: () => archive, setItem: (_key: string, value: string) => { archive = value; } };
+  const previousExport = JSON.stringify(store.export());
+  preserveSample(storage, store.export(), clarification, "saved-1", "2027-02-26T12:00:00Z");
+  const preserved = readPreservedSamples(storage)[0];
+  check("Reload backup preserves original evidence, decisions, events and source reviews", JSON.stringify(preserved.project) === previousExport && JSON.stringify(preserved.sourceReview) === JSON.stringify(clarification) && Store.fromExport(preserved.project).currentness("DEC-1") === "historical");
+  let blocked = false;
+  try { preserveSample({ getItem: () => "not valid JSON", setItem: () => { throw new Error("must not overwrite"); } }, store.export(), clarification, "saved-2", "2027-02-26T12:00:00Z"); } catch { blocked = true; }
+  check("Invalid preserved history blocks replacement rather than overwriting it", blocked);
+  let quotaBlocked = false;
+  try { preserveSample({ getItem: () => null, setItem: () => { throw new Error("quota"); } }, store.export(), clarification, "saved-3", "2027-02-26T12:00:00Z"); } catch { quotaBlocked = true; }
+  check("Storage failure blocks preservation before sample replacement", quotaBlocked);
+  const edits = new Store(initialProject(), structuredClone(REQUIREMENTS), []); loadBaseline(edits); recordAcceptance(edits, "DEC-1");
+  const beforePreview = JSON.stringify(edits.export());
+  const fields = proposedFields(edits, "access", "06:30");
+  const predicted = previewIssueChange(edits, fields);
+  check("Issue preview does not mutate plan and identifies impacted work", JSON.stringify(edits.export()) === beforePreview && (predicted.impact?.impacted.requirementIds.includes("REQ-crew-arrival-1") ?? false));
+  edits.adoptChange({ commandId: "ISSUE-1", role: "project_manager", actor: "PM-rowan", expectedAssessmentRevision: edits.assessmentRevision }, { id: "issue-1", changedFields: fields });
+  check("Applying issue change preserves approval history and reassesses evidence", edits.currentness("DEC-1") === "historical" && edits.assess().requirements.some((item) => item.status !== "supported"));
+  const beforeFailure = JSON.stringify(edits.export());
+  let denied = false; try { edits.adoptChange({ role: "contributor", expectedAssessmentRevision: edits.assessmentRevision }, { id: "denied", changedFields: proposedFields(edits, "capacity", "145") }); } catch { denied = true; }
+  check("Contributor change is rejected without mutation", denied && JSON.stringify(edits.export()) === beforeFailure);
+  let invalid = false; try { proposedFields(edits, "budget", "12.345", "venue"); } catch { invalid = true; }
+  check("Invalid currency input is rejected without mutation", invalid && JSON.stringify(edits.export()) === beforeFailure);
+  let conflict = false; try { edits.adoptChange({ role: "project_manager", expectedAssessmentRevision: edits.assessmentRevision - 1 }, { id: "conflict", changedFields: proposedFields(edits, "capacity", "145") }); } catch { conflict = true; }
+  check("Stale issue changes are rejected without mutation", conflict && JSON.stringify(edits.export()) === beforeFailure);
+  const budgetFields = proposedFields(edits, "budget", "9000.50", "venue");
+  const projectedBudget = previewIssueChange(edits, budgetFields);
+  check("Budget edits update commitment and total together without changing the current plan", typeof budgetFields["budget.committedTotal.minorUnits"].to === "number" && projectedBudget.assessment.assessmentRevision === edits.assessmentRevision + 1 && JSON.stringify(edits.export()) === beforeFailure);
+  check("Each modeled overview issue maps to its in-kind editor", issueEditor("REQ-crew-arrival-1") === "access" && issueEditor("capacity") === "capacity" && issueEditor("budget") === "budget" && issueEditor("runofshow") === "runofshow" && issueEditor("attestation") === null);
+  const newBrief = { ...structuredClone(journey.snapshot().brief as Brief), client: "Aster Works", project: "Autumn dinner", eventDate: "2027-10-09", guestCount: 60, approvedBudget: { currency: "USD", minorUnits: 1200000 }, openQuestions: ["Is the date fixed?"] };
+  const fresh = new Store(newEventProject(newBrief), structuredClone(REQUIREMENTS), []);
+  check("New event starts without sample venue, commitments or evidence", fresh.evidence.length === 0 && fresh.snapshot().location.venueId === "UNASSIGNED" && fresh.snapshot().budget.commitments.length === 0 && fresh.assessmentRevision === 0);
+  fresh.adoptBrief({ commandId: "NEW-BRIEF", role: "project_manager", actor: "PM-rowan", expectedAssessmentRevision: 0 }, newBrief);
+  const newLoaded = Store.fromExport(JSON.parse(JSON.stringify(fresh.export())));
+  check("New brief and unknown plan survive export and reload", newLoaded.snapshot().brief.client === "Aster Works" && newLoaded.snapshot().location.venueId === "UNASSIGNED" && newLoaded.evidence.length === 0 && newLoaded.assess().requirements.some((item) => item.status !== "supported"));
+  const outputReview = reviewSuggestion(accepted, "suggest-mail", "concern", "Follow up on the proposal");
+  const concernSourceIds = outputReview.suggestions.filter((item) => item.status === "concern").flatMap((item) => item.sourceIds);
+  const concernIds = outputReview.suggestions.filter((item) => item.status === "concern").map((item) => item.id);
+  const currentBasis = outputBasis({ revision: journey.assessmentRevision, now: journey.now(), decisions: journey.decisionsList(), sources: outputReview.sources, suggestions: outputReview.suggestions });
+  const v1 = nextOutput([], { projectId: journey.snapshot().id, title: "Client update", body: "Reviewed update citing the concerns.", sourceIds: concernSourceIds, concernIds, basis: currentBasis });
+  const withV1 = { ...outputReview, outputs: [v1] };
+  const withoutOutputs = outputBasis({ revision: journey.assessmentRevision, now: journey.now(), decisions: journey.decisionsList(), sources: withV1.sources, suggestions: withV1.suggestions });
+  check("Retained output records its sources, concerns and review basis", v1.sourceIds.length > 0 && v1.concernIds.length > 0 && !isOutputStale(v1, currentBasis) && withoutOutputs === currentBasis);
+  const v2 = nextOutput(withV1.outputs, { projectId: journey.snapshot().id, title: "Client update", body: "Revised update after review.", sourceIds: concernSourceIds, concernIds, basis: currentBasis });
+  check("New output version supersedes without rewriting the earlier version", v2.version === 2 && v2.supersedes === v1.id && withV1.outputs[0].body === v1.body);
+  const changedBasis = outputBasis({ revision: journey.assessmentRevision + 1, now: journey.now(), decisions: journey.decisionsList(), sources: withV1.sources, suggestions: withV1.suggestions });
+  check("A later relevant change marks saved output stale without changing it", isOutputStale(v1, changedBasis) && v1.body === "Reviewed update citing the concerns.");
+  const afterRestore: unknown = JSON.parse(JSON.stringify(withV1));
+  check("Retained output survives review-data validation and reload", isReviewData(afterRestore) && validateOutputs((afterRestore as { outputs: RetainedOutput[] }).outputs, afterRestore as { sources: typeof outputReview.sources; suggestions: typeof outputReview.suggestions })?.length === 1);
+  const badOutput = structuredClone(withV1) as { sources: typeof outputReview.sources; suggestions: typeof outputReview.suggestions; outputs: RetainedOutput[] };
+  badOutput.outputs[0].sourceIds = ["missing-source"];
+  check("Output with an unknown source is rejected", !isReviewData(badOutput));
   return checks;
 }
