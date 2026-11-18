@@ -3,9 +3,11 @@ import { useCallback, useRef, useState } from "react";
 import { describeCommandError, Store } from "@/oncuex/store";
 import { hasBrief } from "@/oncuex/engine";
 import { PERSONAS, REQUIREMENTS, initialProject } from "@/oncuex/scenario";
+import { loadBaseline } from "@/oncuex/demo";
 import type { Role } from "@/oncuex/types";
 
 const STORAGE_KEY = "oncuex.operator.record.v2";
+const BLANK_KEY = "oncuex.blank.v1";
 
 const freshStore = () =>
   new Store(initialProject(), structuredClone(REQUIREMENTS), []);
@@ -41,7 +43,15 @@ function boot(): BootState {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { store: freshStore(), restoredAt: null, savedAt: null, notice: null };
+      // A deliberate clean reset stays blank across reloads. A first visit
+      // opens the reviewed sample through the same commands as the walkthrough.
+      if (window.localStorage.getItem(BLANK_KEY) === "1") {
+        return { store: freshStore(), restoredAt: null, savedAt: null, notice: null };
+      }
+      const store = freshStore();
+      loadBaseline(store);
+      const persisted = persist(store);
+      return { store, restoredAt: null, savedAt: persisted.savedAt, notice: null };
     }
     const parsed = JSON.parse(raw) as { savedAt?: unknown; export?: unknown };
     const store = Store.fromExport(parsed.export);
@@ -72,6 +82,7 @@ function persist(store: Store): { savedAt: string | null; warning: string | null
       STORAGE_KEY,
       JSON.stringify({ savedAt, export: store.export() }),
     );
+    window.localStorage.removeItem(BLANK_KEY);
     return { savedAt, warning: null };
   } catch (error) {
     return {
@@ -145,12 +156,35 @@ export function useOperatorSession() {
     } catch {
       // ignore
     }
+    try {
+      window.localStorage.setItem(BLANK_KEY, "1");
+    } catch {
+      // Storage may be unavailable; the in-memory blank state still works.
+    }
     storeRef.current = freshStore();
     setSavedAt(null);
     setReloadCheck(null);
     setPersonaId(PERSONAS[0].id);
-    setFlash("Clean record opened: no brief, no evidence, no events, revision 0.");
+    setFlash("A blank event is ready. You can start with the sample plan when you are.");
     setError(null);
+    setVersion((current) => current + 1);
+  }, []);
+
+  const reloadSample = useCallback(() => {
+    try {
+      window.localStorage.removeItem(BLANK_KEY);
+    } catch {
+      // ignore
+    }
+    const store = freshStore();
+    loadBaseline(store);
+    const persisted = persist(store);
+    storeRef.current = store;
+    setSavedAt(persisted.savedAt);
+    setReloadCheck(null);
+    setPersonaId(PERSONAS[0].id);
+    setFlash("Sample plan reloaded. The Northwind launch is ready to review.");
+    setError(persisted.warning);
     setVersion((current) => current + 1);
   }, []);
 
@@ -197,6 +231,27 @@ export function useOperatorSession() {
     setVersion((current) => current + 1);
   }, []);
 
+  const restoreFromFile = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const restored = Store.fromExport(parsed);
+      const persisted = persist(restored);
+      storeRef.current = restored;
+      setSavedAt(persisted.savedAt);
+      setReloadCheck({
+        ok: true,
+        detail: "Project data restored from a validated export.",
+      });
+      setFlash("Project data restored. The checklist, activity and sign-offs were replayed.");
+      setError(persisted.warning);
+    } catch (error) {
+      setFlash(null);
+      setError(`The project data could not be restored: ${describeCommandError(error)}`);
+    }
+    setVersion((current) => current + 1);
+  }, []);
+
   const downloadExport = useCallback(() => {
     const store = storeRef.current;
     const blob = new Blob([JSON.stringify(store.export(), null, 2)], {
@@ -231,8 +286,10 @@ export function useOperatorSession() {
     apply,
     setClock,
     reset,
+    reloadSample,
     reloadFromExport,
     downloadExport,
+    restoreFromFile,
     clearMessages,
   };
 }

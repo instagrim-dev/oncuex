@@ -1,0 +1,348 @@
+diff -ruN a/oncuex/engine.py b/oncuex/engine.py
+--- a/oncuex/engine.py	2026-11-18 16:21:23.838650460 +0000
++++ b/oncuex/engine.py	2026-11-18 16:21:47.794709694 +0000
+@@ -57,6 +57,12 @@
+     return "sha256:" + hashlib.sha256(canon(obj).encode()).hexdigest()
+ 
+ 
++def is_expired(evidence: dict, now: str) -> bool:
++    """An evidence record is stale once its expiry has passed."""
++    expires = evidence.get("expiresAt")
++    return bool(expires) and expires <= now
++
++
+ def resolve(doc: dict, path: str):
+     cur: Any = doc
+     for part in path.split("."):
+@@ -197,7 +203,7 @@
+         current: list[dict] = []
+         stale: list[dict] = []
+         for ev in admissible:
+-            if ev.get("expiresAt") and ev["expiresAt"] <= now:
++            if is_expired(ev, now):
+                 stale.append({"code": "evidence_expired", "evidenceId": ev["id"]})
+                 continue
+             changed = next(
+diff -ruN a/oncuex/store.py b/oncuex/store.py
+--- a/oncuex/store.py	2026-11-18 16:21:23.838650460 +0000
++++ b/oncuex/store.py	2026-11-18 16:21:43.509699148 +0000
+@@ -7,6 +7,9 @@
+ 
+ Recording a decision advances the first and not the second, so a decision is
+ current the instant it is written.
++
++A command is validated before any state is touched, so a rejected write leaves
++the record byte-identical to the record that preceded it.
+ """
+ 
+ from __future__ import annotations
+@@ -14,7 +17,7 @@
+ import copy
+ from typing import Any
+ 
+-from .engine import digest, evaluate
++from .engine import TYPED_PATHS, digest, evaluate, is_expired, value_matches
+ 
+ 
+ class CommandError(Exception):
+@@ -61,7 +64,8 @@
+     def latest_decision(self) -> dict | None:
+         if not self._decisions:
+             return None
+-        return self._decisions[sorted(self._decisions)[-1]]
++        # Insertion order, not identifier order: DEC-10 follows DEC-2.
++        return list(self._decisions.values())[-1]
+ 
+     def currentness(self, decision_id: str) -> str:
+         decision = self._decisions.get(decision_id)
+@@ -71,18 +75,23 @@
+             return "historical"
+         if decision["requirementSetVersion"] != self.project.get("requirementSetVersion", 1):
+             return "historical"
++        now = self.project.get("_now", "1970-01-01T00:00:00Z")
+         for ev_id in decision["_evidenceIds"]:
+             ev = next((e for e in self.evidence if e["id"] == ev_id), None)
+             if ev is None or ev.get("reviewDisposition") != "accepted":
+                 return "historical"
++            if is_expired(ev, now):
++                return "historical"
+         return "current"
+ 
+     # ---------------------------------------------------------------- writes
+-    def _append(self, command: dict, event_type: str, payload: dict) -> dict:
+-        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
+-            raise CommandError("unknown_event", event_type)
+-
++    def _replay(self, command: dict) -> dict | None:
+         command_id = command.get("commandId")
++        if command_id is None:
++            return None
++        return self._results.get(command_id)
++
++    def _check_revision(self, command: dict) -> None:
+         expected = command.get("expectedAssessmentRevision")
+         if expected is not None and expected != self.assessment_revision:
+             raise CommandError(
+@@ -90,8 +99,20 @@
+                 f"expected assessment revision {expected}, current {self.assessment_revision}",
+             )
+ 
+-        if self._results.get(command_id):
+-            return self._results[command_id]
++    def _begin(self, command: dict, event_type: str) -> dict | None:
++        """Replay or validate a command before any state is touched."""
++        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
++            raise CommandError("unknown_event", event_type)
++        replay = self._replay(command)
++        if replay is not None:
++            return replay
++        self._check_revision(command)
++        return None
++
++    def _commit(self, command: dict, event_type: str, payload: dict) -> dict:
++        """Append the event and advance both counters. Cannot reject."""
++        if event_type not in ASSESSED_EVENTS | OPINION_EVENTS:
++            raise CommandError("unknown_event", event_type)
+ 
+         assessed = event_type in ASSESSED_EVENTS
+         if assessed:
+@@ -101,10 +122,10 @@
+         event = {
+             "id": f"EVT-{self.sequence}",
+             "sequence": self.sequence,
+-            "commandId": command_id,
++            "commandId": command.get("commandId"),
+             "eventType": event_type,
+             "actor": command.get("actor"),
+-            "expectedAssessmentRevision": expected,
++            "expectedAssessmentRevision": command.get("expectedAssessmentRevision"),
+             "resultingAssessmentRevision": self.assessment_revision,
+             "payload": payload,
+         }
+@@ -114,47 +135,61 @@
+             "assessmentRevision": self.assessment_revision,
+             "assessedFactsChanged": assessed,
+         }
+-        self._results[command_id] = result
++        command_id = command.get("commandId")
++        if command_id is not None:
++            self._results[command_id] = result
+         return result
+ 
+     def adopt_brief(self, command: dict, brief: dict) -> dict:
+         if command.get("role") != "project_manager":
+             raise CommandError("role_denied")
++        replay = self._begin(command, "brief.adopted")
++        if replay is not None:
++            return replay
+         self.project["brief"] = copy.deepcopy(brief)
+-        return self._append(command, "brief.adopted", {"brief": brief})
++        return self._commit(command, "brief.adopted", {"brief": brief})
+ 
+     def attach_evidence(self, command: dict, evidence: dict) -> dict:
++        replay = self._begin(command, "evidence.attached")
++        if replay is not None:
++            return replay
+         if any(e["id"] == evidence["id"] for e in self.evidence):
+             raise CommandError("duplicate_evidence", evidence["id"])
+         for path, value in evidence["boundFieldVersions"].items():
+-            from .engine import TYPED_PATHS, value_matches
+-
+             spec = TYPED_PATHS.get(path)
+             if spec is None:
+                 raise CommandError("undeclared_path", path)
+             if spec["type"] != "collection" and not value_matches(path, value):
+                 raise CommandError("type_mismatch", f"{path}={value!r}")
+         self.evidence.append(copy.deepcopy(evidence))
+-        return self._append(command, "evidence.attached", {"evidenceId": evidence["id"]})
++        return self._commit(command, "evidence.attached", {"evidenceId": evidence["id"]})
+ 
+     def adopt_change(self, command: dict, change: dict) -> dict:
+         """Apply field changes, bumping the assessed revision exactly once."""
+         if command.get("role") != "project_manager":
+             raise CommandError("role_denied")
+-        for path, delta in change["changedFields"].items():
++        replay = self._begin(command, "change.adopted")
++        if replay is not None:
++            return replay
++        fields = change["changedFields"]
++        for path in fields:
++            self._check_path(path)
++        for path, delta in fields.items():
+             self._set_path(path, delta["to"])
+-        return self._append(command, "change.adopted", {"changeId": change["id"]})
++        return self._commit(command, "change.adopted", {"changeId": change["id"]})
+ 
+     def record_decision(self, command: dict) -> dict:
+         # A repeated command returns the stored result before any other validation,
+         # so a retried acceptance is idempotent rather than a duplicate.
+-        if self._results.get(command.get("commandId")):
+-            return self._results[command["commandId"]]
++        replay = self._replay(command)
++        if replay is not None:
++            return replay
+         if command.get("role") != "project_manager":
+             raise CommandError("role_denied")
+         decision_id = command["decisionId"]
+         if decision_id in self._decisions:
+             raise CommandError("duplicate_decision", decision_id)
++        self._check_revision(command)
+ 
+         assessment = self.assess()
+         if assessment["readiness"] != "ready_for_review":
+@@ -177,12 +212,19 @@
+             "disposition": "accepted",
+             "_evidenceIds": evidence_ids,
+         }
++        result = self._commit(command, "decision.recorded", {"decisionId": decision_id})
+         self._decisions[decision_id] = decision
+-        result = self._append(command, "decision.recorded", {"decisionId": decision_id})
+         result["decisionId"] = decision_id
+         return result
+ 
+     # ---------------------------------------------------------------- helpers
++    def _check_path(self, path: str) -> None:
++        cursor: Any = self.project
++        for part in path.split(".")[:-1]:
++            if not isinstance(cursor, dict) or not isinstance(cursor.get(part), dict):
++                raise CommandError("bad_path", path)
++            cursor = cursor[part]
++
+     def _set_path(self, path: str, value: Any) -> None:
+         parts = path.split(".")
+         cursor = self.project
+diff -ruN a/tools/check_oracle.py b/tools/check_oracle.py
+--- a/tools/check_oracle.py	2026-11-18 16:21:23.838650460 +0000
++++ b/tools/check_oracle.py	2026-11-18 16:21:58.243735366 +0000
+@@ -232,6 +232,73 @@
+     check("regression: replay appends nothing", replay.sequence == seq_after_first,
+           f"{seq_after_first} -> {replay.sequence}")
+ 
++    # ------------------------------------------------------------ honesty regressions
++    # A rejected command must not mutate the record it refused to write.
++    frozen = Store(
++        project_for(scenario, "baseline", 8),
++        scenario["requirements"],
++        evidence_for(scenario, all_base),
++    )
++    frozen_record = json.dumps(frozen.export(), sort_keys=True)
++    stale_attempts = (
++        ("change", lambda: frozen.adopt_change(
++            {"commandId": "CMD-S1", "role": "project_manager",
++             "expectedAssessmentRevision": 7},
++            {"id": "CHG-S1", "changedFields": {"location.capacity": {"from": 150, "to": 999}}})),
++        ("evidence", lambda: frozen.attach_evidence(
++            {"commandId": "CMD-S2", "role": "project_manager",
++             "expectedAssessmentRevision": 7},
++            scenario["evidence"][7])),
++        ("brief", lambda: frozen.adopt_brief(
++            {"commandId": "CMD-S3", "role": "project_manager",
++             "expectedAssessmentRevision": 7},
++            {**scenario["scenario"]["brief"], "client": "MUTATED"})),
++    )
++    for label, attempt in stale_attempts:
++        try:
++            attempt()
++            check(f"regression: stale {label} rejected", False, "no error")
++        except CommandError as exc:
++            check(f"regression: stale {label} rejected", exc.code == "conflict", exc.code)
++    check("regression: rejected commands leave the record byte-identical",
++          json.dumps(frozen.export(), sort_keys=True) == frozen_record)
++    check("regression: rejected change did not move the venue capacity",
++          frozen.snapshot()["location"]["capacity"] == 150,
++          str(frozen.snapshot()["location"]["capacity"]))
++
++    # expiry must be visible to decision currentness, not only to readiness
++    expiring_decision = Store(
++        project_for(scenario, "baseline", 8),
++        scenario["requirements"],
++        evidence_for(scenario, all_base),
++    )
++    expiring_decision.record_decision({
++        "commandId": "CMD-E", "actor": "PM-rowan", "role": "project_manager",
++        "decisionId": "DEC-E", "expectedAssessmentRevision": 8,
++    })
++    check("regression: decision reads current before expiry",
++          expiring_decision.currentness("DEC-E") == "current")
++    expiring_decision.project["_now"] = "2027-03-08T00:00:00Z"
++    check("regression: expired evidence cannot leave a decision current",
++          expiring_decision.currentness("DEC-E") == "historical",
++          expiring_decision.currentness("DEC-E"))
++
++    # the latest decision is the last recorded, not the highest identifier
++    ordered = Store(
++        project_for(scenario, "baseline", 8),
++        scenario["requirements"],
++        evidence_for(scenario, all_base),
++    )
++    for decision_id in ("DEC-1", "DEC-2", "DEC-10"):
++        ordered.record_decision({
++            "commandId": f"CMD-{decision_id}", "actor": "PM-rowan",
++            "role": "project_manager", "decisionId": decision_id,
++            "expectedAssessmentRevision": 8,
++        })
++    check("regression: latest decision is the last recorded, not the highest id",
++          ordered.latest_decision()["id"] == "DEC-10",
++          ordered.latest_decision()["id"])
++
+     print(f"{checks - len(failures)}/{checks} checks passed")
+     for failure in failures:
+         print(f"  FAIL {failure}")
+diff -ruN a/tools/reference_path.py b/tools/reference_path.py
+--- a/tools/reference_path.py	2026-11-18 16:21:23.839650462 +0000
++++ b/tools/reference_path.py	2026-11-18 16:21:58.243735366 +0000
+@@ -192,6 +192,7 @@
+ 
+     sequence_before = store.sequence
+     revision_before = store.assessment_revision
++    record_before = json.dumps(store.export(), sort_keys=True)
+     try:
+         store.adopt_change(
+             {"commandId": "CMD-50", "role": "project_manager",
+@@ -203,6 +204,11 @@
+         check("stale write is rejected", exc.code == "conflict", exc.code)
+     check("failed write changed no counter",
+           (store.sequence, store.assessment_revision) == (sequence_before, revision_before))
++    check("failed write left the record byte-identical",
++          json.dumps(store.export(), sort_keys=True) == record_before)
++    check("failed write did not move the venue capacity",
++          store.snapshot()["location"]["capacity"] == 140,
++          str(store.snapshot()["location"]["capacity"]))
+ 
+     print("\n8. Export")
+     export = store.export()
+diff -ruN a/tools/validate_fixtures.py b/tools/validate_fixtures.py
+--- a/tools/validate_fixtures.py	2026-11-18 16:21:23.839650462 +0000
++++ b/tools/validate_fixtures.py	2026-11-18 16:21:58.243735366 +0000
+@@ -132,6 +132,23 @@
+     return schema
+ 
+ 
++def check_engine_schema(schema: dict) -> None:
++    """The engine's typed path table must not drift from the fixture schema."""
++    sys.path.insert(0, ROOT)
++    try:
++        from oncuex.engine import TYPED_PATHS
++    except Exception as exc:
++        err(f"engine schema not importable: {exc}")
++        return
++
++    missing = sorted(set(schema) - set(TYPED_PATHS))
++    extra = sorted(set(TYPED_PATHS) - set(schema))
++    if missing:
++        err(f"engine schema missing paths: {missing}")
++    if extra:
++        err(f"engine schema declares paths absent from fieldSchema: {extra}")
++
++
+ def check_bindings(scn, schema) -> dict:
+     req_ids = {r["id"] for r in scn["requirements"]}
+     for req in scn["requirements"]:
+@@ -331,6 +348,7 @@
+ def main() -> int:
+     scenario, oracle, cases = load()
+     schema = check_schema(scenario)
++    check_engine_schema(schema)
+     graph = check_bindings(scenario, schema)
+     evidence = check_evidence(scenario, schema)
+     check_amounts(scenario)

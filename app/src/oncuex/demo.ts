@@ -42,6 +42,23 @@ function commandFor(
   };
 }
 
+export function adoptReviewedBrief(
+  store: Store,
+  brief: typeof BRIEF,
+): CommandResult {
+  return store.adoptBrief(commandFor(store, "project_manager", PM_ACTOR), brief);
+}
+
+export function attachBaselineEvidence(store: Store): string {
+  for (const id of BASELINE_EVIDENCE_IDS) {
+    store.attachEvidence(
+      commandFor(store, "project_manager", PM_ACTOR),
+      structuredClone(evidenceById(id)),
+    );
+  }
+  return `${BASELINE_EVIDENCE_IDS.length} prepared documents added.`;
+}
+
 export function loadBaseline(store: Store): string {
   store.adoptBrief(commandFor(store, "project_manager", PM_ACTOR), structuredClone(BRIEF));
   for (const id of BASELINE_EVIDENCE_IDS) {
@@ -50,7 +67,7 @@ export function loadBaseline(store: Store): string {
       structuredClone(evidenceById(id)),
     );
   }
-  return `brief adopted and ${BASELINE_EVIDENCE_IDS.length} evidence records attached through commands.`;
+  return `The Northwind brief is adopted and ${BASELINE_EVIDENCE_IDS.length} sources are attached.`;
 }
 
 export function recordAcceptance(store: Store, decisionId: string): CommandResult {
@@ -81,14 +98,14 @@ export function adoptVenueChange(store: Store): string {
   const change = venueChange(store.snapshot());
   const count = Object.keys(change.changedFields).length;
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return `${change.id} adopted as one assessed change across ${count} fields.`;
+  return `The venue moved to Pier 9 Loft across ${count} plan values. Review what needs updating.`;
 }
 
 export function adoptRecovery(store: Store): string {
   const change = recoveryChange(store.snapshot());
   const count = Object.keys(change.changedFields).length;
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return `${change.id} adopted as one assessed change across ${count} fields.`;
+  return `The recovered plan is in place across ${count} plan values.`;
 }
 
 export function attachRecoveryEvidence(store: Store): string {
@@ -98,7 +115,7 @@ export function attachRecoveryEvidence(store: Store): string {
       structuredClone(evidenceById(id)),
     );
   }
-  return `${RECOVERY_EVIDENCE_IDS.length} sourced recovery records attached.`;
+  return `${RECOVERY_EVIDENCE_IDS.length} recovered documents added.`;
 }
 
 export function reviewEvidence(
@@ -121,7 +138,7 @@ export function attachPendingEvidence(store: Store): string {
     commandFor(store, "contributor", CONTRIBUTOR_ACTOR),
     record,
   );
-  return `${record.id} uploaded by ${CONTRIBUTOR_ACTOR} and left pending review.`;
+  return "A new source was added and needs your review.";
 }
 
 /** O7: removing a scope archives its records instead of deleting them. */
@@ -140,7 +157,7 @@ export function withdrawPhotographer(store: Store): string {
     requirements,
     evidence,
   );
-  return `requirement set v${store.project.requirementSetVersion}: photographer scope withdrawn, its record archived.`;
+  return "Photography has been removed from the plan; its source is kept for history.";
 }
 
 export function revertToBaseline(store: Store): string {
@@ -150,7 +167,7 @@ export function revertToBaseline(store: Store): string {
     changedFields: diffState(store.snapshot(), baselineTarget()),
   };
   store.adoptChange(commandFor(store, "project_manager", PM_ACTOR), change);
-  return "plan values reverted to the baseline. Readiness can return; the earlier acceptance cannot.";
+  return "The plan values are back to the original launch plan. The earlier approval does not return.";
 }
 
 /* ---------------------------------------------------------------- state probes */
@@ -183,5 +200,6 @@ export const FIXTURE_EVIDENCE_COUNT = EVIDENCE.length;
 export function changeTitle(id: string): string {
   if (id === CHANGE_META.venue.id) return CHANGE_META.venue.title;
   if (id === CHANGE_META.recovery.id) return CHANGE_META.recovery.title;
-  return id;
+  if (id === "CHG-3") return "Plan values reverted to the original launch plan";
+  return "The plan changed";
 }

@@ -1,0 +1,1513 @@
+diff -ruN a/README.md b/README.md
+--- a/README.md	2026-11-18 16:50:52.413982616 +0000
++++ b/README.md	2026-11-18 16:50:52.415982621 +0000
+@@ -56,11 +56,12 @@
+ 
+ ## Reference implementation
+ 
+-`oncuex/` is a headless engine covering the contract: typed schema validation, pure evaluation, an append-only event log with two independent counters, and revision-bound decisions. `oncuex/schema.py` is the single declaration of every bindable path and record shape; the engine and the fixture validator both import it. It has no UI and no platform adapter.
++`oncuex/` is a headless engine covering the contract: typed schema validation, pure evaluation of readiness and selective impact, an append-only event log with two independent counters, and revision-bound decisions. `oncuex/schema.py` is the single declaration of every bindable path and record shape; the engine and the fixture validator both import it. It has no UI and no platform adapter.
+ 
+ ```sh
+ python3 tools/validate_fixtures.py   # schema, bindings, evidence, oracle coherence
+ python3 tools/check_schema.py        # executable schema checks, positive and negative
++python3 tools/check_core.py          # readiness, currentness and selective impact
+ python3 tools/check_oracle.py        # 40 differential checks against the oracle
+ python3 tools/reference_path.py      # baseline -> change -> recovery -> acceptance -> reload
+ ```
+diff -ruN a/docs/domain-model.md b/docs/domain-model.md
+--- a/docs/domain-model.md	2026-11-18 16:50:52.413982616 +0000
++++ b/docs/domain-model.md	2026-11-18 16:50:52.415982621 +0000
+@@ -105,6 +105,7 @@
+ | --- | --- | --- |
+ | `id` | string | |
+ | `requirementId` | string | |
++| `type` | enum | `confirmation`, `document`, `measurement`, `quote`; must equal the requirement's `requiredEvidenceType` |
+ | `sourceRefIds` | string[] | Every source the excerpt is drawn from |
+ | `sourceExcerpt` | string | Required; must be textually present in a cited source |
+ | `contentDigest` | string | `sha256` over `{sourceRefIds, sourceExcerpt}` |
+@@ -261,6 +262,8 @@
+ 
+ A requirement declares `fieldBindings`; evidence declares `boundFieldVersions`. A change computes the transitive dependent set over both `fieldBindings` and `prerequisiteIds`, and returns `impacted` and `unaffected` requirement and evidence IDs.
+ 
++An assessment reports `impact` for the last adopted change and for currently expired evidence. With neither trigger there is no impact block. The sets come from declared bindings and the prerequisite closure; an identifier list is never asserted directly.
++
+ Dependency closure runs in both the change and the expiry case. Expiring a prerequisite's evidence makes every dependent `blocked`, not merely its own requirement `outdated`.
+ 
+ There is no blanket reset. In the reference scenario the photographer requirement binds only to `photographer.deliverables.*` and `photographer.arrivalWindow.*`, so it remains `supported` across a venue change. A cycle or unresolved prerequisite yields `blocked` with the cycle path in the reason.
+diff -ruN a/docs/verification.md b/docs/verification.md
+--- a/docs/verification.md	2026-11-18 16:50:52.413982616 +0000
++++ b/docs/verification.md	2026-11-18 16:50:52.415982621 +0000
+@@ -81,7 +81,7 @@
+ Reload directly after V20. Both counters are reconstructed from the event log: sequence 9, assessment revision 8. The decision is still `current` and the history is intact.
+ 
+ **V23 — A later decision supersedes without rewriting.**
+-At the recovered assessment revision 15, record a second decision. It is `current`; the first decision is `historical` and remains readable with its own target revision.
++At the recovered assessment revision 16, record a second decision. It is `current`; the first decision is `historical` and remains readable with its own target revision.
+ 
+ ## Correctness conditions
+ 
+diff -ruN a/fixtures/README.md b/fixtures/README.md
+--- a/fixtures/README.md	2026-11-18 16:50:52.413982616 +0000
++++ b/fixtures/README.md	2026-11-18 16:50:52.415982621 +0000
+@@ -2,7 +2,7 @@
+ 
+ A single fictional launch held across three states, so that change, impact and recovery can be specified exactly. Every amount asserted in any state is stated by a referenced source; see [Verification of asserted values](#verification-of-asserted-values).
+ 
+-| Element | Baseline, assessment revision 8 | Venue change, assessment revision 9 | Corrected plan, assessment revision 15 |
++| Element | Baseline, assessment revision 8 | Venue change, assessment revision 9 | Corrected plan, assessment revision 16 |
+ | --- | --- | --- | --- |
+ | Venue | Foundry Hall, capacity 150 | Pier 9 Loft, capacity 110 | Pier 9 Loft plus annex, capacity 140 |
+ | Loading window | 05:00–12:00 | 06:00–07:30 | 05:00–08:00 |
+@@ -14,7 +14,7 @@
+ | Photographer | 120 images in 10 days | unchanged | unchanged |
+ | Readiness | ready for review | not ready | ready for review |
+ 
+-Guest count 120 and the $30,000 budget are fixed across all three states. Assessment revisions are stated because the baseline needs eight evidence-attachment events to reach `ready_for_review`; the numbers are consequences of the event log, not independent choices.
++Guest count 120 and the $30,000 budget are fixed across all three states. Assessment revisions are stated because the baseline needs eight evidence-attachment events to reach `ready_for_review`; the corrected plan is adopted as a change event, so recovery reaches 16 after six further evidence attachments. The numbers are consequences of the event log, not independent choices.
+ 
+ ## Requirements
+ 
+@@ -51,9 +51,9 @@
+ | Recovered claim | Stated by | Bound by |
+ | --- | --- | --- |
+ | Annex raises licensed occupancy to 140 and extends access to 08:00 | `SRC-3`, `SRC-8` | `EV-9`, `EV-8` |
+-| Combined venue fee is $1,245,000 | `SRC-3`, `SRC-12` | `EV-12` |
+-| Catering rescoped to $895,000 | `SRC-6`, `SRC-12` | `EV-12` |
+-| Production reduced build is $585,000 | `SRC-7`, `SRC-12` | `EV-12` |
++| Combined venue fee is $12,450 | `SRC-3`, `SRC-12` | `EV-12` |
++| Catering rescoped to $8,950 | `SRC-6`, `SRC-12` | `EV-12` |
++| Production reduced build is $5,850 | `SRC-7`, `SRC-12` | `EV-12` |
+ | Crew call moves to 06:30 | `SRC-9` | `EV-10` |
+ | Run of show ends 21:00 | `SRC-10` | `EV-11` |
+ | Annex attestation reviewed to 2027-03-10 | `SRC-8` | `EV-13` |
+@@ -62,6 +62,8 @@
+ 
+ ## Verification of asserted values
+ 
++Amounts in source text are dollars; state values are minor units. The validator converts dollars before comparing, so a match cannot be produced by comparing magnitudes alone.
++
+ The scenario ships with a validator that enforces the contract mechanically:
+ 
+ - Every `fieldSchema` path resolves in every state, and every state path is declared.
+diff -ruN a/fixtures/acceptance-cases.json b/fixtures/acceptance-cases.json
+--- a/fixtures/acceptance-cases.json	2026-11-18 16:50:52.413982616 +0000
++++ b/fixtures/acceptance-cases.json	2026-11-18 16:50:52.415982621 +0000
+@@ -318,9 +318,9 @@
+     {
+       "id": "V23",
+       "area": "decision",
+-      "action": "Record a second decision at the recovered assessment revision 15.",
++      "action": "Record a second decision at the recovered assessment revision 16.",
+       "expected": {
+-        "assessmentRevision": 15,
++        "assessmentRevision": 16,
+         "decisionCurrentness": "current",
+         "priorDecisions": [
+           {
+diff -ruN a/fixtures/expected-impact.json b/fixtures/expected-impact.json
+--- a/fixtures/expected-impact.json	2026-11-18 16:50:52.413982616 +0000
++++ b/fixtures/expected-impact.json	2026-11-18 16:50:52.415982621 +0000
+@@ -25,13 +25,14 @@
+     { "command": "CMD-8", "event": "evidence.attached",      "eventSequence": 8,  "assessmentRevision": 8,  "detail": "EV-7" },
+     { "command": "CMD-9", "event": "decision.recorded",      "eventSequence": 9,  "assessmentRevision": 8,  "detail": "DEC-1", "note": "sequence advances, facts do not" },
+     { "command": "CMD-10", "event": "change.adopted",        "eventSequence": 10, "assessmentRevision": 9,  "detail": "CHG-1 venue change" },
+-    { "command": "CMD-11", "event": "evidence.attached",     "eventSequence": 11, "assessmentRevision": 10, "detail": "EV-8" },
+-    { "command": "CMD-12", "event": "evidence.attached",     "eventSequence": 12, "assessmentRevision": 11, "detail": "EV-9" },
+-    { "command": "CMD-13", "event": "evidence.attached",     "eventSequence": 13, "assessmentRevision": 12, "detail": "EV-10" },
+-    { "command": "CMD-14", "event": "evidence.attached",     "eventSequence": 14, "assessmentRevision": 13, "detail": "EV-11" },
+-    { "command": "CMD-15", "event": "evidence.attached",     "eventSequence": 15, "assessmentRevision": 14, "detail": "EV-12" },
+-    { "command": "CMD-16", "event": "evidence.attached",     "eventSequence": 16, "assessmentRevision": 15, "detail": "EV-13" },
+-    { "command": "CMD-17", "event": "decision.recorded",     "eventSequence": 17, "assessmentRevision": 15, "detail": "DEC-2" }
++    { "command": "CMD-11", "event": "change.adopted",        "eventSequence": 11, "assessmentRevision": 10, "detail": "CHG-2 recovered plan" },
++    { "command": "CMD-12", "event": "evidence.attached",     "eventSequence": 12, "assessmentRevision": 11, "detail": "EV-8" },
++    { "command": "CMD-13", "event": "evidence.attached",     "eventSequence": 13, "assessmentRevision": 12, "detail": "EV-9" },
++    { "command": "CMD-14", "event": "evidence.attached",     "eventSequence": 14, "assessmentRevision": 13, "detail": "EV-10" },
++    { "command": "CMD-15", "event": "evidence.attached",     "eventSequence": 15, "assessmentRevision": 14, "detail": "EV-11" },
++    { "command": "CMD-16", "event": "evidence.attached",     "eventSequence": 16, "assessmentRevision": 15, "detail": "EV-12" },
++    { "command": "CMD-17", "event": "evidence.attached",     "eventSequence": 17, "assessmentRevision": 16, "detail": "EV-13" },
++    { "command": "CMD-18", "event": "decision.recorded",     "eventSequence": 18, "assessmentRevision": 16, "detail": "DEC-2" }
+   ],
+ 
+   "cases": [
+@@ -159,7 +160,7 @@
+       "id": "O4",
+       "dependsOn": "O2",
+       "state": "state.recovered",
+-      "assessmentRevision": 15,
++      "assessmentRevision": 16,
+       "evidenceRequired": ["EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13"],
+       "requirementStatus": {
+         "REQ-venue-loading-1": "supported",
+@@ -175,9 +176,9 @@
+       "decisionEligibility": {
+         "eligible": true,
+         "role": "project_manager",
+-        "targetAssessmentRevision": 15
++        "targetAssessmentRevision": 16
+       },
+-      "note": "Every recovered value is stated by a referenced source and bound by a reviewed evidence record. No concession is asserted without support: the annex occupancy of 140 and access to 08:00 come from SRC-3 and SRC-8, the rescoped catering and production figures from SRC-6 and SRC-7, the crew call from SRC-9 and the run of show from SRC-10."
++      "note": "The recovered plan is adopted as CHG-2 at assessment revision 10; six evidence attachments follow, so recovery reaches 16. Every recovered value is stated by a referenced source and bound by a reviewed evidence record. No concession is asserted without support: the annex occupancy of 140 and access to 08:00 come from SRC-3 and SRC-8, the rescoped catering and production figures from SRC-6 and SRC-7, the crew call from SRC-9 and the run of show from SRC-10."
+     },
+ 
+     {
+@@ -311,15 +312,15 @@
+       "label": "Decision recorded at recovery remains current",
+       "dependsOn": "O4",
+       "trigger": {
+-        "command": "CMD-17",
++        "command": "CMD-18",
+         "action": "recordDecision",
+-        "targetAssessmentRevision": 15,
++        "targetAssessmentRevision": 16,
+         "actor": "PM-rowan",
+         "role": "project_manager"
+       },
+       "expected": {
+-        "eventSequence": 17,
+-        "assessmentRevision": 15,
++        "eventSequence": 18,
++        "assessmentRevision": 16,
+         "decisionId": "DEC-2",
+         "decisionCurrentness": "current",
+         "priorDecisions": [{ "id": "DEC-1", "currentness": "historical" }]
+diff -ruN a/fixtures/scenario.json b/fixtures/scenario.json
+--- a/fixtures/scenario.json	2026-11-18 16:50:52.413982616 +0000
++++ b/fixtures/scenario.json	2026-11-18 16:50:52.415982621 +0000
+@@ -135,7 +135,7 @@
+         "setupMinutes": 45
+       },
+       "prerequisiteIds": [],
+-      "requiredEvidenceType": "confirmation",
++      "requiredEvidenceType": "document",
+       "expiryPolicy": {
+         "mode": "absolute",
+         "value": "2027-03-07T00:00:00Z"
+@@ -186,7 +186,7 @@
+       "prerequisiteIds": [
+         "REQ-venue-loading-1"
+       ],
+-      "requiredEvidenceType": "confirmation",
++      "requiredEvidenceType": "document",
+       "expiryPolicy": {
+         "mode": "absolute",
+         "value": "2027-03-07T00:00:00Z"
+@@ -236,7 +236,7 @@
+         "unit": "USD"
+       },
+       "prerequisiteIds": [],
+-      "requiredEvidenceType": "quote",
++      "requiredEvidenceType": "document",
+       "expiryPolicy": {
+         "mode": "absolute",
+         "value": "2027-03-01T00:00:00Z"
+@@ -281,7 +281,7 @@
+         "deliveryDays": 10
+       },
+       "prerequisiteIds": [],
+-      "requiredEvidenceType": "confirmation",
++      "requiredEvidenceType": "document",
+       "expiryPolicy": {
+         "mode": "absolute",
+         "value": "2027-03-12T00:00:00Z"
+@@ -306,14 +306,14 @@
+     {
+       "id": "SRC-2",
+       "kind": "vendor_document",
+-      "excerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 950,000 USD.",
++      "excerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
+       "attribution": "Venue pack, Foundry Hall, page 2",
+       "trust": "untrusted_for_instructions"
+     },
+     {
+       "id": "SRC-3",
+       "kind": "vendor_document",
+-      "excerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 1,185,000 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 60,000 USD, combined venue fee 1,245,000 USD.",
++      "excerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 11,850 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 600 USD, combined venue fee 12,450 USD.",
+       "attribution": "Venue pack, Pier 9 Loft, page 2",
+       "trust": "untrusted_for_instructions"
+     },
+@@ -334,14 +334,14 @@
+     {
+       "id": "SRC-6",
+       "kind": "vendor_document",
+-      "excerpt": "Cedar & Salt caterer, original quote: 1,100,000 USD for 120 covers. Revised menu omitting the plated dessert course: 895,000 USD.",
++      "excerpt": "Cedar & Salt caterer, original quote: 11,000 USD for 120 covers. Revised menu omitting the plated dessert course: 8,950 USD.",
+       "attribution": "Catering quote, lines 3 and 7",
+       "trust": "untrusted_for_instructions"
+     },
+     {
+       "id": "SRC-7",
+       "kind": "vendor_document",
+-      "excerpt": "Lantern Studio production, original quote: 620,000 USD. Reduced scenic build omitting the suspended banner: 585,000 USD.",
++      "excerpt": "Lantern Studio production, original quote: 6,200 USD. Reduced scenic build omitting the suspended banner: 5,850 USD.",
+       "attribution": "Production quote, lines 2 and 5",
+       "trust": "untrusted_for_instructions"
+     },
+@@ -369,14 +369,14 @@
+     {
+       "id": "SRC-11",
+       "kind": "vendor_document",
+-      "excerpt": "Mira Okonjo photography: 240,000 USD, 120 edited images within 10 days.",
++      "excerpt": "Mira Okonjo photography: 2,400 USD, 120 edited images within 10 days.",
+       "attribution": "Photography agreement, section 4",
+       "trust": "untrusted_for_instructions"
+     },
+     {
+       "id": "SRC-12",
+       "kind": "internal_note",
+-      "excerpt": "Budget reconciliation. Foundry Hall plan: venue 950,000; catering 1,100,000; production 620,000; photography 240,000; total 2,910,000 USD. Pier 9 Loft plan before recovery: venue 1,185,000; catering 1,100,000; production 620,000; photography 240,000; total 3,145,000 USD. Pier 9 Loft plan after recovery: venue including annex 1,245,000; catering rescoped 895,000; production reduced build 585,000; photography 240,000; total 2,965,000 USD.",
++      "excerpt": "Budget reconciliation. Foundry Hall plan: venue 9,500; catering 11,000; production 6,200; photography 2,400; total 29,100 USD. Pier 9 Loft plan before recovery: venue 11,850; catering 11,000; production 6,200; photography 2,400; total 31,450 USD. Pier 9 Loft plan after recovery: venue including annex 12,450; catering rescoped 8,950; production reduced build 5,850; photography 2,400; total 29,650 USD.",
+       "attribution": "Finance reconciliation, revision 3",
+       "trust": "untrusted_for_instructions"
+     }
+@@ -385,11 +385,12 @@
+     {
+       "id": "EV-1",
+       "requirementId": "REQ-venue-loading-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-2"
+       ],
+-      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 950,000 USD.",
+-      "contentDigest": "sha256:cde96d067779f6c223131326ca78b27b1ab17e4dc9831d126da87f471f885794",
++      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
++      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+       "artifactRef": "synthetic://REQ-venue-loading-1/EV-1.pdf",
+       "issuer": "VEN-A",
+       "observedAt": "2027-02-20T09:00:00Z",
+@@ -405,11 +406,12 @@
+     {
+       "id": "EV-2",
+       "requirementId": "REQ-venue-capacity-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-2"
+       ],
+-      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 950,000 USD.",
+-      "contentDigest": "sha256:cde96d067779f6c223131326ca78b27b1ab17e4dc9831d126da87f471f885794",
++      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
++      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+       "artifactRef": "synthetic://REQ-venue-capacity-1/EV-2.pdf",
+       "issuer": "VEN-A",
+       "observedAt": "2027-02-20T09:00:00Z",
+@@ -424,6 +426,7 @@
+     {
+       "id": "EV-3",
+       "requirementId": "REQ-crew-arrival-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-5"
+       ],
+@@ -443,6 +446,7 @@
+     {
+       "id": "EV-4",
+       "requirementId": "REQ-production-runofshow-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-5"
+       ],
+@@ -462,11 +466,12 @@
+     {
+       "id": "EV-5",
+       "requirementId": "REQ-budget-total-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-12"
+       ],
+-      "sourceExcerpt": "Foundry Hall plan: venue 950,000; catering 1,100,000; production 620,000; photography 240,000; total 2,910,000 USD.",
+-      "contentDigest": "sha256:460e2922e806fd8bcd41aa0974b3a603f121ce5441262818219a832f0018d6f0",
++      "sourceExcerpt": "Foundry Hall plan: venue 9,500; catering 11,000; production 6,200; photography 2,400; total 29,100 USD.",
++      "contentDigest": "sha256:d5f353d09a1d6e2fbbd4ebad0eca44214fa90c8911a8e23834f46b8a5ba5758f",
+       "artifactRef": "synthetic://REQ-budget-total-1/EV-5.pdf",
+       "issuer": "PM-rowan",
+       "observedAt": "2027-02-22T12:00:00Z",
+@@ -480,11 +485,12 @@
+     {
+       "id": "EV-6",
+       "requirementId": "REQ-fire-permit-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-2"
+       ],
+-      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 950,000 USD.",
+-      "contentDigest": "sha256:cde96d067779f6c223131326ca78b27b1ab17e4dc9831d126da87f471f885794",
++      "sourceExcerpt": "Foundry Hall: freight access 05:00-12:00, licensed occupancy 150, hard stop 23:00, licence fee 9,500 USD.",
++      "contentDigest": "sha256:f8f0416a1e2795df8d6f3de3b883900fcc017795f1f99f1578ca136052b96002",
+       "artifactRef": "synthetic://REQ-fire-permit-1/EV-6.pdf",
+       "issuer": "VEN-A",
+       "observedAt": "2027-02-20T09:00:00Z",
+@@ -498,6 +504,7 @@
+     {
+       "id": "EV-7",
+       "requirementId": "REQ-photographer-deliverables-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-4",
+         "SRC-11"
+@@ -519,6 +526,7 @@
+     {
+       "id": "EV-8",
+       "requirementId": "REQ-venue-loading-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-9"
+       ],
+@@ -539,12 +547,13 @@
+     {
+       "id": "EV-9",
+       "requirementId": "REQ-venue-capacity-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-3",
+         "SRC-8"
+       ],
+-      "sourceExcerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 1,185,000 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 60,000 USD, combined venue fee 1,245,000 USD.",
+-      "contentDigest": "sha256:231dc5907597df029ccad366ebb5cc6f6b5984f55c4b7a7186f9eb141e35be8f",
++      "sourceExcerpt": "Pier 9 Loft: freight access 06:00-07:30, licensed occupancy 110, hard stop 21:30, loft fee 11,850 USD. Adjoining annex raises licensed occupancy to 140 and extends freight access to 08:00 for an additional 600 USD, combined venue fee 12,450 USD.",
++      "contentDigest": "sha256:3401f34e8c8c45b7e89ff5daf67eeb2c89d1d4bcfb605dabe32a0b86272f6222",
+       "artifactRef": "synthetic://REQ-venue-capacity-1/EV-9.pdf",
+       "issuer": "VEN-B",
+       "observedAt": "2027-03-01T09:00:00Z",
+@@ -559,6 +568,7 @@
+     {
+       "id": "EV-10",
+       "requirementId": "REQ-crew-arrival-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-9"
+       ],
+@@ -578,6 +588,7 @@
+     {
+       "id": "EV-11",
+       "requirementId": "REQ-production-runofshow-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-10"
+       ],
+@@ -597,11 +608,12 @@
+     {
+       "id": "EV-12",
+       "requirementId": "REQ-budget-total-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-12"
+       ],
+-      "sourceExcerpt": "Pier 9 Loft plan after recovery: venue including annex 1,245,000; catering rescoped 895,000; production reduced build 585,000; photography 240,000; total 2,965,000 USD.",
+-      "contentDigest": "sha256:82ed504ea446f84e2b3ff299c58fd796d4feac5b267640aa57f4618dda179510",
++      "sourceExcerpt": "Pier 9 Loft plan after recovery: venue including annex 12,450; catering rescoped 8,950; production reduced build 5,850; photography 2,400; total 29,650 USD.",
++      "contentDigest": "sha256:9781b6827c93cb606cc5aa2dab51df6a6d7f98f47492985037810d7f7ae181a0",
+       "artifactRef": "synthetic://REQ-budget-total-1/EV-12.pdf",
+       "issuer": "PM-rowan",
+       "observedAt": "2027-03-01T12:00:00Z",
+@@ -615,6 +627,7 @@
+     {
+       "id": "EV-13",
+       "requirementId": "REQ-fire-permit-1",
++      "type": "document",
+       "sourceRefIds": [
+         "SRC-8"
+       ],
+@@ -775,7 +788,7 @@
+       }
+     },
+     "recovered": {
+-      "assessmentRevision": 15,
++      "assessmentRevision": 16,
+       "location": {
+         "venueId": "VEN-B",
+         "venueName": "Pier 9 Loft",
+diff -ruN a/oncuex/__init__.py b/oncuex/__init__.py
+--- a/oncuex/__init__.py	2026-11-18 16:50:52.413982616 +0000
++++ b/oncuex/__init__.py	2026-11-18 16:50:52.415982621 +0000
+@@ -10,7 +10,11 @@
+ 
+ from .engine import (
+     SchemaError,
++    combine_impact,
++    dependent_closure,
+     evaluate,
++    impact_of_change,
++    impact_of_expiry,
+     integrated_checks,
+     validate_snapshot,
+     TYPED_PATHS,
+@@ -22,6 +26,10 @@
+     "CommandError",
+     "Store",
+     "evaluate",
++    "impact_of_change",
++    "impact_of_expiry",
++    "combine_impact",
++    "dependent_closure",
+     "integrated_checks",
+     "validate_snapshot",
+     "TYPED_PATHS",
+diff -ruN a/oncuex/engine.py b/oncuex/engine.py
+--- a/oncuex/engine.py	2026-11-18 16:50:52.413982616 +0000
++++ b/oncuex/engine.py	2026-11-18 16:50:52.415982621 +0000
+@@ -73,11 +73,21 @@
+     return False
+ 
+ 
+-def _evidence_for(req_id: str, evidence: Iterable[dict]) -> list[dict]:
+-    return [e for e in evidence if e["requirementId"] == req_id]
++def _evidence_for(req: dict, evidence: Iterable[dict]) -> list[dict]:
++    """Only a record of the required type can support the requirement."""
++    return [
++        e
++        for e in evidence
++        if e["requirementId"] == req["id"] and e.get("type") == req["requiredEvidenceType"]
++    ]
+ 
+ 
+-def evaluate(snapshot: dict, requirements: list[dict], evidence: list[dict]) -> dict:
++def evaluate(
++    snapshot: dict,
++    requirements: list[dict],
++    evidence: list[dict],
++    impact: dict | None = None,
++) -> dict:
+     """Pure evaluation. Never writes, never records acceptance."""
+     validate_snapshot(snapshot, requirements, evidence)
+ 
+@@ -86,7 +96,7 @@
+     residuals: dict[str, list[dict]] = {}
+ 
+     def direct_status(req: dict) -> tuple[str, list[dict]]:
+-        records = _evidence_for(req["id"], evidence)
++        records = _evidence_for(req, evidence)
+         admissible = [e for e in records if e["reviewDisposition"] == "accepted"]
+         if not admissible:
+             return "missing", [{"code": "mandatory_evidence_missing"}]
+@@ -123,18 +133,22 @@
+             return "blocked", [{"code": "predicate_false"}]
+         return "supported", []
+ 
+-    # resolve prerequisites first (graph validated acyclic by the caller)
++    # Resolve prerequisites first. A cycle is a blocked condition, not a crash:
++    # ambiguous precedence must never default to supported.
++    graph = {rid: list(by_id[rid]["prerequisiteIds"]) for rid in by_id}
++    cycle_paths = _cycle_paths(graph)
++
+     order: list[str] = []
+     temporary: set[str] = set()
+     permanent: set[str] = set()
+ 
+     def visit(node: str) -> None:
+-        if node in permanent:
++        if node in permanent or node in cycle_paths:
+             return
+         if node in temporary:
+-            raise SchemaError(f"prerequisite cycle at {node}")
++            return
+         temporary.add(node)
+-        for parent in by_id[node]["prerequisiteIds"]:
++        for parent in graph[node]:
+             visit(parent)
+         temporary.discard(node)
+         permanent.add(node)
+@@ -143,6 +157,14 @@
+     for rid in by_id:
+         visit(rid)
+ 
++    for rid, path in cycle_paths.items():
++        statuses[rid] = "blocked"
++        residuals[rid] = [{
++            "code": "prerequisite_cycle",
++            "path": path,
++            "prerequisiteIds": graph[rid],
++        }]
++
+     for rid in order:
+         req = by_id[rid]
+         status, why = direct_status(req)
+@@ -170,7 +192,7 @@
+     if integrated["status"] == "fail":
+         reason_codes.append("integration_failed")
+ 
+-    return {
++    result = {
+         "assessmentRevision": snapshot["assessmentRevision"],
+         "requirements": [
+             {
+@@ -185,6 +207,9 @@
+         "readiness": "ready_for_review" if ready else "not_ready",
+         "residualReasonCodes": reason_codes,
+     }
++    if impact is not None:
++        result["impact"] = impact
++    return result
+ 
+ 
+ def integrated_checks(snapshot: dict, requirements: list[dict], statuses: dict) -> dict:
+@@ -271,6 +296,122 @@
+     return {"status": "fail" if checks else "pass", "checks": checks}
+ 
+ 
++def _cycle_paths(graph: dict[str, list[str]]) -> dict[str, list[str]]:
++    """Return each requirement that sits on a prerequisite cycle, with a path."""
++    state: dict[str, int] = {}
++    stack: list[str] = []
++    cycles: dict[str, list[str]] = {}
++
++    def dfs(node: str) -> None:
++        state[node] = 1
++        stack.append(node)
++        for parent in graph.get(node, []):
++            if state.get(parent, 0) == 0:
++                dfs(parent)
++            elif state.get(parent) == 1:
++                start = stack.index(parent)
++                path = stack[start:] + [parent]
++                for member in stack[start:]:
++                    cycles.setdefault(member, list(path))
++        stack.pop()
++        state[node] = 2
++
++    for node in graph:
++        if state.get(node, 0) == 0:
++            dfs(node)
++    return cycles
++
++
++def dependent_closure(seeds: set[str], requirements: list[dict]) -> set[str]:
++    """Requirement ids affected by the seeds, following prerequisites downward."""
++    graph = {req["id"]: list(req["prerequisiteIds"]) for req in requirements}
++    affected = set(seeds)
++    changed = True
++    while changed:
++        changed = False
++        for rid, prerequisites in graph.items():
++            if rid not in affected and any(p in affected for p in prerequisites):
++                affected.add(rid)
++                changed = True
++    return affected
++
++
++def _impact_block(
++    requirements: list[dict],
++    evidence: list[dict],
++    affected_requirements: set[str],
++    affected_evidence: set[str],
++) -> dict:
++    return {
++        "impacted": {
++            "requirementIds": [r["id"] for r in requirements if r["id"] in affected_requirements],
++            "evidenceIds": [e["id"] for e in evidence if e["id"] in affected_evidence],
++        },
++        "unaffected": {
++            "requirementIds": [r["id"] for r in requirements if r["id"] not in affected_requirements],
++            "evidenceIds": [e["id"] for e in evidence if e["id"] not in affected_evidence],
++        },
++    }
++
++
++def impact_of_change(
++    changed_paths: set[str],
++    requirements: list[dict],
++    evidence: list[dict],
++) -> dict:
++    """Impact of a set of changed field paths, computed from declared bindings."""
++    changed = set(changed_paths)
++    seeds = {r["id"] for r in requirements if changed & set(r["fieldBindings"])}
++    seeds |= {e["requirementId"] for e in evidence if changed & set(e["boundFieldVersions"])}
++    affected_requirements = dependent_closure(seeds, requirements)
++    affected_evidence = {
++        e["id"]
++        for e in evidence
++        if e["requirementId"] in affected_requirements or changed & set(e["boundFieldVersions"])
++    }
++    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
++
++
++def impact_of_expiry(
++    requirements: list[dict],
++    evidence: list[dict],
++    now: str,
++) -> dict | None:
++    """Impact of currently expired evidence, propagated through dependents."""
++    expired = {
++        e["id"]
++        for e in evidence
++        if e.get("reviewDisposition") == "accepted" and is_expired(e, now)
++    }
++    if not expired:
++        return None
++    seeds = {e["requirementId"] for e in evidence if e["id"] in expired}
++    affected_requirements = dependent_closure(seeds, requirements)
++    affected_evidence = {
++        e["id"] for e in evidence if e["requirementId"] in affected_requirements
++    }
++    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
++
++
++def combine_impact(
++    blocks: list[dict | None],
++    requirements: list[dict],
++    evidence: list[dict],
++) -> dict | None:
++    """Union of impact triggers, with unaffected recomputed from the union."""
++    present = [block for block in blocks if block]
++    if not present:
++        return None
++    if len(present) == 1:
++        return present[0]
++    affected_requirements: set[str] = set()
++    affected_evidence: set[str] = set()
++    for block in present:
++        affected_requirements |= set(block["impacted"]["requirementIds"])
++        affected_evidence |= set(block["impacted"]["evidenceIds"])
++    return _impact_block(requirements, evidence, affected_requirements, affected_evidence)
++
++
+ def _fmt(total: int) -> str:
+     return f"{total // 60:02d}:{total % 60:02d}"
+ 
+diff -ruN a/oncuex/schema.py b/oncuex/schema.py
+--- a/oncuex/schema.py	2026-11-18 16:50:52.413982616 +0000
++++ b/oncuex/schema.py	2026-11-18 16:50:52.415982621 +0000
+@@ -498,6 +498,7 @@
+     allowed = {
+         "id",
+         "requirementId",
++        "type",
+         "sourceRefIds",
+         "sourceExcerpt",
+         "contentDigest",
+@@ -515,6 +516,9 @@
+     if requirement_ids is not None and ev.get("requirementId") not in requirement_ids:
+         errors.append(f"{label}: unknown requirement {ev.get('requirementId')!r}")
+ 
++    if ev.get("type") not in EVIDENCE_TYPES:
++        errors.append(f"{label}: unknown evidence type {ev.get('type')!r}")
++
+     refs = ev.get("sourceRefIds")
+     if not isinstance(refs, list) or not refs or not all(isinstance(r, str) for r in refs):
+         errors.append(f"{label}: sourceRefIds must be a non-empty list of strings")
+diff -ruN a/oncuex/store.py b/oncuex/store.py
+--- a/oncuex/store.py	2026-11-18 16:50:52.413982616 +0000
++++ b/oncuex/store.py	2026-11-18 16:50:52.415982621 +0000
+@@ -17,7 +17,7 @@
+ import copy
+ from typing import Any
+ 
+-from .engine import evaluate
++from .engine import combine_impact, evaluate, impact_of_change, impact_of_expiry
+ from .schema import (
+     FIELD_SCHEMA,
+     TYPED_PATHS,
+@@ -72,7 +72,34 @@
+         return snap
+ 
+     def assess(self) -> dict:
+-        return evaluate(self.snapshot(), self.requirements, self.evidence)
++        return evaluate(
++            self.snapshot(), self.requirements, self.evidence, impact=self.impact()
++        )
++
++    def impact(self) -> dict | None:
++        """Impact of the last adopted change and of currently expired evidence.
++
++        Both triggers are computed from declared bindings and the prerequisite
++        closure. When neither is present, no impact block is reported.
++        """
++        changed = self.last_changed_paths()
++        change = (
++            impact_of_change(changed, self.requirements, self.evidence) if changed else None
++        )
++        now = self.project.get("_now", "1970-01-01T00:00:00Z")
++        expiry = impact_of_expiry(self.requirements, self.evidence, now)
++        return combine_impact([change, expiry], self.requirements, self.evidence)
++
++    def last_changed_paths(self) -> set[str]:
++        """Changed paths recorded by the most recent adopted change.
++
++        Deriving this from the event log rather than instance state means a
++        reload reproduces the same impact without a private side channel.
++        """
++        for event in reversed(self.events):
++            if event["eventType"] == "change.adopted":
++                return set(event.get("payload", {}).get("changedPaths", ()))
++        return set()
+ 
+     def latest_decision(self) -> dict | None:
+         if not self._decisions:
+@@ -201,7 +228,10 @@
+                 raise CommandError("type_mismatch", f"{path}={target!r}")
+         for path, delta in fields.items():
+             self._set_path(path, delta["to"])
+-        return self._commit(command, "change.adopted", {"changeId": change["id"]})
++        return self._commit(command, "change.adopted", {
++            "changeId": change["id"],
++            "changedPaths": sorted(fields),
++        })
+ 
+     def record_decision(self, command: dict) -> dict:
+         # A repeated command returns the stored result before any other validation,
+diff -ruN a/tools/check_core.py b/tools/check_core.py
+--- a/tools/check_core.py	1970-01-01 00:00:00.000000000 +0000
++++ b/tools/check_core.py	2026-11-18 16:50:52.416982623 +0000
+@@ -0,0 +1,257 @@
++#!/usr/bin/env python3
++"""Focused behavioral tests for the deterministic core.
++
++Covers the three things the core must compute and the boundary it must not
++cross:
++
++    readiness            a completed checklist cannot produce ready_for_review
++    evidence currentness stale records cannot veto current support
++    selective impact     a change or an expiry moves exactly the declared set,
++                         and never the photographer deliverable
++
++Expected sets are read from the oracle only to compare against computed output.
++No module under oncuex/ reads a fixture.
++
++    python3 tools/check_core.py
++"""
++
++from __future__ import annotations
++
++import copy
++import json
++import os
++import sys
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, ROOT)
++
++from oncuex import CommandError, Store  # noqa: E402
++from oncuex.engine import evaluate, impact_of_change, impact_of_expiry  # noqa: E402
++from oncuex.schema import FIELD_SCHEMA  # noqa: E402
++
++SCENARIO = os.path.join(ROOT, "fixtures", "scenario.json")
++ORACLE = os.path.join(ROOT, "fixtures", "expected-impact.json")
++
++checks = 0
++failures: list[str] = []
++
++
++def check(label: str, condition: bool, detail: str = "") -> None:
++    global checks
++    checks += 1
++    if not condition:
++        failures.append(f"{label}: {detail}")
++
++
++def load():
++    with open(SCENARIO, encoding="utf-8") as handle:
++        scenario = json.load(handle)
++    with open(ORACLE, encoding="utf-8") as handle:
++        oracle = json.load(handle)
++    return scenario, oracle
++
++
++def flatten(obj, prefix=""):
++    out = {}
++    if isinstance(obj, dict):
++        for key, val in obj.items():
++            out.update(flatten(val, f"{prefix}.{key}" if prefix else key))
++    else:
++        out[prefix] = obj
++    return out
++
++
++def project_for(scenario: dict, state_name: str, revision: int) -> dict:
++    state = copy.deepcopy(scenario["state"][state_name])
++    state.pop("assessmentRevision", None)
++    state.update({
++        "id": scenario["scenario"]["id"],
++        "brief": copy.deepcopy(scenario["scenario"]["brief"]),
++        "circulationBuffer": scenario["scenario"]["brief"]["circulationBuffer"],
++        "requirementSetVersion": scenario["scenario"]["requirementSetVersion"],
++        "assessmentRevision": revision,
++    })
++    return state
++
++
++def base_evidence(scenario: dict) -> list[dict]:
++    wanted = {f"EV-{n}" for n in range(1, 8)}
++    return [copy.deepcopy(e) for e in scenario["evidence"] if e["id"] in wanted]
++
++
++def changed_fields(before: dict, after: dict) -> dict:
++    now, want = flatten(before), flatten(after)
++    changed = {}
++    for path, value in want.items():
++        if path == "assessmentRevision":
++            continue
++        if path in now and now[path] == value:
++            continue
++        changed[path] = {"from": now.get(path), "to": value}
++    return changed
++
++
++def sets(block: dict) -> tuple[set[str], set[str], set[str], set[str]]:
++    return (
++        set(block["impacted"]["requirementIds"]),
++        set(block["impacted"]["evidenceIds"]),
++        set(block["unaffected"]["requirementIds"]),
++        set(block["unaffected"]["evidenceIds"]),
++    )
++
++
++def statuses(assessment: dict) -> dict[str, str]:
++    return {r["requirementId"]: r["status"] for r in assessment["requirements"]}
++
++
++def main() -> int:
++    scenario, oracle = load()
++    cases = {case["id"]: case for case in oracle["cases"]}
++    requirements = copy.deepcopy(scenario["requirements"])
++    evidence = base_evidence(scenario)
++
++    # ------------------------------------------------------------ baseline
++    baseline_store = Store(project_for(scenario, "baseline", 8), requirements, evidence)
++    baseline = baseline_store.assess()
++    check("baseline is ready for review", baseline["readiness"] == "ready_for_review",
++          str(baseline["residualReasonCodes"]))
++    check("no change means no impact block", "impact" not in baseline,
++          str(baseline.get("impact")))
++
++    # ------------------------------------------------------------ evidence type
++    mistyped = copy.deepcopy(evidence)
++    mistyped[0]["type"] = "confirmation"
++    typed = evaluate(project_for(scenario, "baseline", 8),
++                     copy.deepcopy(requirements), mistyped)
++    check("evidence of the wrong type cannot support a requirement",
++          statuses(typed)["REQ-venue-loading-1"] == "missing",
++          statuses(typed).get("REQ-venue-loading-1"))
++
++    # ------------------------------------------------------------ V5 impact
++    changed = changed_fields(scenario["state"]["baseline"], scenario["state"]["venueChange"])
++    change_store = Store(project_for(scenario, "baseline", 8),
++                         copy.deepcopy(requirements), base_evidence(scenario))
++    change_store.adopt_change(
++        {"commandId": "CHG-1", "role": "project_manager", "expectedAssessmentRevision": 8},
++        {"id": "CHG-1", "changedFields": changed},
++    )
++    after_change = change_store.assess()
++    o2 = cases["O2"]
++    impact = after_change.get("impact", {})
++    check("venue change reports an impact block", bool(impact), "no impact in assessment")
++    if impact:
++        got = sets(impact)
++        expected = sets({"impacted": o2["impacted"], "unaffected": o2["unaffected"]})
++        check("venue change impacted requirements equal the oracle",
++              got[0] == expected[0], f"{sorted(got[0])} != {sorted(expected[0])}")
++        check("venue change impacted evidence equals the oracle",
++              got[1] == expected[1], f"{sorted(got[1])} != {sorted(expected[1])}")
++        check("venue change unaffected requirements equal the oracle",
++              got[2] == expected[2], f"{sorted(got[2])} != {sorted(expected[2])}")
++        check("venue change unaffected evidence equals the oracle",
++              got[3] == expected[3], f"{sorted(got[3])} != {sorted(expected[3])}")
++        check("photographer requirement is unaffected",
++              "REQ-photographer-deliverables-1" in got[2])
++        check("photographer evidence is unaffected", "EV-7" in got[3])
++
++    status = statuses(after_change)
++    check("photographer deliverable stays supported through the change",
++          status["REQ-photographer-deliverables-1"] == "supported",
++          status.get("REQ-photographer-deliverables-1"))
++    check("venue change is not ready", after_change["readiness"] == "not_ready")
++
++    # ------------------------------------------------------------ V9 impact
++    expiry_store = Store(project_for(scenario, "baseline", 8),
++                         copy.deepcopy(requirements), base_evidence(scenario))
++    expiry_store.project["_now"] = "2027-03-08T00:00:00Z"
++    for record in expiry_store.evidence:
++        if record["id"] != "EV-1":
++            record["expiresAt"] = "2027-03-20T00:00:00Z"
++    after_expiry = expiry_store.assess()
++    o6 = cases["O6"]["expected"]
++    expiry_impact = after_expiry.get("impact", {})
++    check("expiry reports an impact block", bool(expiry_impact), "no impact in assessment")
++    if expiry_impact:
++        got = sets(expiry_impact)
++        expected = sets({"impacted": o6["impacted"], "unaffected": o6["unaffected"]})
++        check("expiry impacted requirements equal the closure",
++              got[0] == expected[0], f"{sorted(got[0])} != {sorted(expected[0])}")
++        check("expiry impacted evidence equals the oracle",
++              got[1] == expected[1], f"{sorted(got[1])} != {sorted(expected[1])}")
++        check("expiry unaffected requirements equal the oracle",
++              got[2] == expected[2], f"{sorted(got[2])} != {sorted(expected[2])}")
++        check("expiry leaves the photographer unaffected",
++              "REQ-photographer-deliverables-1" in got[2] and "EV-7" in got[3])
++        check("expiry propagates to production",
++              "REQ-production-runofshow-1" in got[0])
++
++    expiry_status = statuses(after_expiry)
++    check("expired loading evidence is outdated",
++          expiry_status["REQ-venue-loading-1"] == "outdated",
++          expiry_status.get("REQ-venue-loading-1"))
++    check("crew arrival is blocked by the expired prerequisite",
++          expiry_status["REQ-crew-arrival-1"] == "blocked",
++          expiry_status.get("REQ-crew-arrival-1"))
++    check("production run of show is blocked by the expired prerequisite",
++          expiry_status["REQ-production-runofshow-1"] == "blocked",
++          expiry_status.get("REQ-production-runofshow-1"))
++    check("capacity is unaffected by expiry",
++          expiry_status["REQ-venue-capacity-1"] == "supported",
++          expiry_status.get("REQ-venue-capacity-1"))
++
++    # ------------------------------------------------------------ pure functions
++    computed = impact_of_change(set(changed), requirements, evidence)
++    check("impact_of_change is independent of store state",
++          sets(computed) == sets({"impacted": o2["impacted"], "unaffected": o2["unaffected"]}),
++          "pure function disagrees with the store")
++    no_expiry = impact_of_expiry(requirements, evidence, "2027-01-01T00:00:00Z")
++    check("no expired evidence means no expiry impact", no_expiry is None, str(no_expiry))
++
++    # ------------------------------------------------------------ V4 cycle boundary
++    cyclic = copy.deepcopy(requirements)
++    by_id = {req["id"]: req for req in cyclic}
++    by_id["REQ-venue-loading-1"]["prerequisiteIds"] = ["REQ-crew-arrival-1"]
++    try:
++        assessment = evaluate(project_for(scenario, "baseline", 8), cyclic, evidence)
++    except Exception as exc:  # a raise is the current failure mode
++        check("a prerequisite cycle is reported, not raised", False,
++              f"{type(exc).__name__}: {exc}")
++        assessment = None
++    if assessment is not None:
++        cycle_status = statuses(assessment)
++        check("cycle members are blocked", cycle_status["REQ-venue-loading-1"] == "blocked"
++              and cycle_status["REQ-crew-arrival-1"] == "blocked",
++              f"{cycle_status['REQ-venue-loading-1']}/{cycle_status['REQ-crew-arrival-1']}")
++        residuals = next(r for r in assessment["requirements"]
++                         if r["requirementId"] == "REQ-venue-loading-1")["residuals"]
++        check("cycle residual names the path",
++              any(r.get("code") == "prerequisite_cycle" and r.get("path")
++                  for r in residuals), str(residuals))
++        check("a dependent of a cycle is blocked",
++              cycle_status["REQ-production-runofshow-1"] == "blocked",
++              cycle_status["REQ-production-runofshow-1"])
++        check("a cycle does not optimistically support any member",
++              all(cycle_status[rid] != "supported"
++                  for rid in ("REQ-venue-loading-1", "REQ-crew-arrival-1")))
++        check("a cycle is not ready", assessment["readiness"] == "not_ready")
++        check("a cycle fails dependency_closure",
++              any(c["id"] == "dependency_closure" for c in assessment["integrated"]["checks"]),
++              str([c["id"] for c in assessment["integrated"]["checks"]]))
++
++    # ------------------------------------------------------------ unaffected stability
++    before_photo = next(r for r in baseline["requirements"]
++                        if r["requirementId"] == "REQ-photographer-deliverables-1")
++    after_photo = next(r for r in after_change["requirements"]
++                       if r["requirementId"] == "REQ-photographer-deliverables-1")
++    check("photographer residual list is unchanged by the venue change",
++          before_photo["residuals"] == after_photo["residuals"] == [],
++          str(after_photo["residuals"]))
++
++    print(f"{checks - len(failures)}/{checks} core checks passed")
++    for failure in failures:
++        print(f"  FAIL {failure}")
++    return 1 if failures else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff -ruN a/tools/check_oracle.py b/tools/check_oracle.py
+--- a/tools/check_oracle.py	2026-11-18 16:50:52.413982616 +0000
++++ b/tools/check_oracle.py	2026-11-18 16:50:52.416982623 +0000
+@@ -95,7 +95,7 @@
+ 
+     # ------------------------------------------------------------ O4 recovery
+     recovery_store = Store(
+-        project_for(scenario, "recovered", 15),
++        project_for(scenario, "recovered", 16),
+         scenario["requirements"],
+         evidence_for(scenario, all_base | all_recovery),
+     )
+@@ -160,22 +160,22 @@
+ 
+     # ------------------------------------------------------------ O11 supersede
+     recovering = Store(
+-        project_for(scenario, "recovered", 15),
++        project_for(scenario, "recovered", 16),
+         scenario["requirements"],
+         evidence_for(scenario, all_base | all_recovery),
+     )
+     recovering.record_decision({
+         "commandId": "CMD-17", "actor": "PM-rowan", "role": "project_manager",
+-        "decisionId": "DEC-2", "expectedAssessmentRevision": 15,
++        "decisionId": "DEC-2", "expectedAssessmentRevision": 16,
+     })
+     check("O11 current", recovering.currentness("DEC-2") == "current")
+     check("O11 targets recovered revision",
+-          recovering.latest_decision()["targetAssessmentRevision"] == 15)
++          recovering.latest_decision()["targetAssessmentRevision"] == 16)
+ 
+     # ------------------------------------------------------------ defect classes
+     # a stale record must not veto a requirement that current evidence supports
+     superseded = Store(
+-        project_for(scenario, "recovered", 15),
++        project_for(scenario, "recovered", 16),
+         scenario["requirements"],
+         evidence_for(scenario, all_base | all_recovery),
+     )
+diff -ruN a/tools/check_schema.py b/tools/check_schema.py
+--- a/tools/check_schema.py	2026-11-18 16:50:52.413982616 +0000
++++ b/tools/check_schema.py	2026-11-18 16:50:52.416982623 +0000
+@@ -174,6 +174,12 @@
+     expect_rejection("duplicate requirement id rejected",
+                      lambda d: d["requirements"][1].update({"id": d["requirements"][0]["id"]}),
+                      "ids must be unique")
++    expect_rejection("evidence without a declared type rejected",
++                     lambda d: d["evidence"][0].pop("type"),
++                     "evidence type")
++    expect_rejection("unknown evidence type rejected",
++                     lambda d: d["evidence"][0].update({"type": "vibes"}),
++                     "unknown evidence type")
+     expect_rejection("unknown evidence requirement rejected",
+                      lambda d: d["evidence"][0].update({"requirementId": "REQ-missing-1"}),
+                      "unknown requirement")
+diff -ruN a/tools/reference_path.py b/tools/reference_path.py
+--- a/tools/reference_path.py	2026-11-18 16:50:52.413982616 +0000
++++ b/tools/reference_path.py	2026-11-18 16:50:52.415982621 +0000
+@@ -1,11 +1,13 @@
+ #!/usr/bin/env python3
+-"""Headless end-to-end path.
++"""Headless end-to-end path through the public command service.
+ 
+-baseline -> venue change -> selective reopening -> evidenced recovery
+-         -> acceptance -> reload
+-
+-Asserts the properties the contract cares about, then prints a short report.
+-Exit code 1 if any assertion fails.
++brief adopted -> seven evidence records -> acceptance -> venue change
++-> recovered plan adopted as a change -> six evidence records
++-> acceptance -> export -> reload
++
++Every state change goes through a command. The final revision is a consequence
++of the event sequence, not a fixture constant: 8 assessed facts at baseline,
++10 after the two changes, 16 after recovery evidence.
+ 
+     python3 tools/reference_path.py
+ """
+@@ -20,11 +22,13 @@
+ sys.path.insert(0, ROOT)
+ 
+ from oncuex import CommandError, Store  # noqa: E402
+-from oncuex.engine import digest  # noqa: E402
+ 
+ FIXTURES = os.path.join(ROOT, "fixtures")
+ failures: list[str] = []
+ 
++BASELINE_EVIDENCE = ["EV-1", "EV-2", "EV-3", "EV-4", "EV-5", "EV-6", "EV-7"]
++RECOVERY_EVIDENCE = ["EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13"]
++
+ 
+ def check(label: str, condition: bool, detail: str = "") -> None:
+     mark = "ok  " if condition else "FAIL"
+@@ -34,38 +38,59 @@
+ 
+ 
+ def load():
+-    scenario = json.load(open(os.path.join(FIXTURES, "scenario.json"), encoding="utf-8"))
+-    oracle = json.load(open(os.path.join(FIXTURES, "expected-impact.json"), encoding="utf-8"))
++    with open(os.path.join(FIXTURES, "scenario.json"), encoding="utf-8") as handle:
++        scenario = json.load(handle)
++    with open(os.path.join(FIXTURES, "expected-impact.json"), encoding="utf-8") as handle:
++        oracle = json.load(handle)
+     return scenario, oracle
+ 
+ 
+-def fresh_store(scenario: dict, state_name: str = "baseline") -> Store:
+-    state = json.loads(json.dumps(scenario["state"][state_name]))
++def initial_store(scenario: dict) -> Store:
++    """Baseline plan before any event: revision 0, no evidence, no brief."""
++    state = json.loads(json.dumps(scenario["state"]["baseline"]))
+     state.pop("assessmentRevision", None)
+     project = {
+         **state,
+         "id": scenario["scenario"]["id"],
+-        "brief": scenario["scenario"]["brief"],
++        "brief": {},
+         "circulationBuffer": scenario["scenario"]["brief"]["circulationBuffer"],
+         "requirementSetVersion": scenario["scenario"]["requirementSetVersion"],
+-        "assessmentRevision": 1,
++        "assessmentRevision": 0,
++    }
++    return Store(project, scenario["requirements"], [])
++
++
++def command(command_id: str, expected: int, **extra) -> dict:
++    return {
++        "commandId": command_id,
++        "role": "project_manager",
++        "expectedAssessmentRevision": expected,
++        **extra,
+     }
+-    evidence = scenario["evidence"] if state_name != "venueChange" else [
+-        e for e in scenario["evidence"] if e["id"] in {
+-            "EV-1", "EV-2", "EV-3", "EV-4", "EV-5", "EV-6", "EV-7"
+-        }
+-    ]
+-    evidence = [e for e in evidence if e["id"] not in {"EV-8","EV-9","EV-10","EV-11","EV-12","EV-13"}]
+-    return Store(project, scenario["requirements"], evidence)
++
++
++def statuses(assessment: dict) -> dict[str, str]:
++    return {r["requirementId"]: r["status"] for r in assessment["requirements"]}
+ 
+ 
+ def main() -> int:
+     scenario, oracle = load()
+-    cases = {c["id"]: c for c in oracle["cases"]}
++    cases = {case["id"]: case for case in oracle["cases"]}
++    by_id = {e["id"]: e for e in scenario["evidence"]}
++    store = initial_store(scenario)
+ 
+     # ---------------------------------------------------------------- baseline
+-    print("\n1. Baseline readiness")
+-    store = fresh_store(scenario)
++    print("\n1. Brief and baseline evidence through commands")
++    store.adopt_brief(command("CMD-1", 0), scenario["scenario"]["brief"])
++    check("brief adoption is the first assessed event",
++          store.assessment_revision == 1, str(store.assessment_revision))
++    for offset, ev_id in enumerate(BASELINE_EVIDENCE, start=2):
++        store.attach_evidence(command(f"CMD-{offset}", store.assessment_revision), by_id[ev_id])
++    check("seven evidence attachments reach revision 8",
++          store.assessment_revision == 8, str(store.assessment_revision))
++    check("the event log holds eight events",
++          store.sequence == 8, str(store.sequence))
++
+     assessment = store.assess()
+     check("baseline is ready for review", assessment["readiness"] == "ready_for_review",
+           str(assessment["residualReasonCodes"]))
+@@ -75,90 +100,88 @@
+ 
+     # ---------------------------------------------------------------- accept
+     print("\n2. Acceptance and immediate readback")
+-    before_revision = store.assessment_revision
+-    before_sequence = store.sequence
+-    result = store.record_decision({
+-        "commandId": "CMD-9", "actor": "PM-rowan", "role": "project_manager",
+-        "decisionId": "DEC-1", "expectedAssessmentRevision": before_revision,
+-    })
+-    check("decision does not advance the assessment revision",
+-          store.assessment_revision == before_revision,
+-          f"{before_revision} -> {store.assessment_revision}")
+-    check("decision advances the event sequence",
+-          store.sequence == before_sequence + 1, f"{store.sequence}")
++    store.record_decision(command("CMD-9", 8, actor="PM-rowan", decisionId="DEC-1"))
++    check("decision leaves the assessment revision at 8",
++          store.assessment_revision == 8, str(store.assessment_revision))
++    check("decision advances the event sequence to 9",
++          store.sequence == 9, str(store.sequence))
+     check("decision reads as current immediately after write",
+           store.currentness("DEC-1") == "current")
+     check("decision targets the assessed revision",
+-          store.latest_decision()["targetAssessmentRevision"] == before_revision)
++          store.latest_decision()["targetAssessmentRevision"] == 8)
+ 
+     # ---------------------------------------------------------------- reload
+-    print("\n3. Reload")
++    print("\n3. Reload after acceptance")
+     restored = reload_from_export(store)
+-    check("sequence survives reload", restored.sequence == store.sequence)
++    check("sequence survives reload", restored.sequence == 9, str(restored.sequence))
+     check("assessment revision survives reload",
+-          restored.assessment_revision == store.assessment_revision)
++          restored.assessment_revision == 8, str(restored.assessment_revision))
+     check("decision still current after reload", restored.currentness("DEC-1") == "current")
+ 
+     # ---------------------------------------------------------------- change
+     print("\n4. Venue change and selective reopening")
+-    before = set(
+-        r["requirementId"] for r in store.assess()["requirements"] if r["status"] == "supported"
+-    )
+     target = json.loads(json.dumps(scenario["state"]["venueChange"]))
+     target.pop("assessmentRevision", None)
+     changed = diff_state(store.project, target)
+     check("venue change touches the budget as well as the venue",
+           "budget.commitments" in changed, str(sorted(changed)))
+-    store.adopt_change(
+-        {
+-            "commandId": "CMD-10", "actor": "PM-rowan", "role": "project_manager",
+-            "expectedAssessmentRevision": store.assessment_revision,
+-        },
+-        {"id": "CHG-1", "changedFields": changed},
+-    )
+-    after = store.assess()
+-    statuses = {r["requirementId"]: r["status"] for r in after["requirements"]}
++    store.adopt_change(command("CMD-10", 8), {"id": "CHG-1", "changedFields": changed})
++    reset = store.assess()
++    got = statuses(reset)
+     expected = cases["O2"]["requirementStatus"]
+-    check("venue-change statuses match the oracle", statuses == expected,
+-          json.dumps({k: v for k, v in statuses.items() if expected.get(k) != v}))
++    check("venue-change statuses match the oracle", got == expected,
++          json.dumps({k: v for k, v in got.items() if expected.get(k) != v}))
+     check("photographer requirement stays supported",
+-          statuses["REQ-photographer-deliverables-1"] == "supported")
++          got["REQ-photographer-deliverables-1"] == "supported")
+     check("exactly six integrated checks fail",
+-          len(after["integrated"]["checks"]) == 6,
+-          str([c["id"] for c in after["integrated"]["checks"]]))
+-    check("all six check ids present",
+-          {c["id"] for c in after["integrated"]["checks"]} == {
+-              "access_vs_arrival", "occupancy_vs_headcount", "runofshow_vs_hardstop",
+-              "total_cost", "attestation_current", "dependency_closure"})
++          len(reset["integrated"]["checks"]) == 6,
++          str([c["id"] for c in reset["integrated"]["checks"]]))
+     check("prior decision is now historical", store.currentness("DEC-1") == "historical")
+-    check("readiness is not_ready", after["readiness"] == "not_ready")
++    check("readiness is not_ready", reset["readiness"] == "not_ready")
+ 
+-    reopened = set(
+-        r["requirementId"] for r in after["requirements"] if r["status"] != "supported"
+-    )
++    reopened = {rid for rid, status in got.items() if status != "supported"}
+     check("six requirements reopened", len(reopened) == 6, str(sorted(reopened)))
+ 
++    impact = reset.get("impact", {})
++    check("the change reports an impact block", bool(impact))
++    check("impacted requirements equal the oracle",
++          set(impact.get("impacted", {}).get("requirementIds", []))
++          == set(cases["O2"]["impacted"]["requirementIds"]),
++          str(impact.get("impacted")))
++    check("impacted evidence equals the oracle",
++          set(impact.get("impacted", {}).get("evidenceIds", []))
++          == set(cases["O2"]["impacted"]["evidenceIds"]),
++          str(impact.get("impacted")))
++    check("unaffected evidence is exactly the photographer's",
++          set(impact.get("unaffected", {}).get("evidenceIds", []))
++          == set(cases["O2"]["unaffected"]["evidenceIds"]),
++          str(impact.get("unaffected")))
++
+     # ---------------------------------------------------------------- recovery
+-    print("\n5. Evidenced recovery")
+-    recovery = [
+-        "EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13",
+-    ]
+-    by_id = {e["id"]: e for e in scenario["evidence"]}
+-    recovered = scenario["state"]["recovered"]
+-    rec_target = json.loads(json.dumps(recovered))
+-    rec_target.pop("assessmentRevision", None)
+-    for path, delta in diff_state(store.project, rec_target).items():
+-        store._set_path(path, delta["to"])
+-    for ev_id in recovery:
+-        store.attach_evidence(
+-            {"commandId": f"CMD-{ev_id}", "role": "project_manager",
+-             "expectedAssessmentRevision": store.assessment_revision},
+-            by_id[ev_id],
+-        )
++    print("\n5. Recovered plan adopted as a change")
++    recovered = json.loads(json.dumps(scenario["state"]["recovered"]))
++    recovered.pop("assessmentRevision", None)
++    recovery_change = diff_state(store.project, recovered)
++    check("recovery touches the venue plan and the budget",
++          {"location.capacity", "budget.commitments"} <= set(recovery_change),
++          str(sorted(recovery_change)))
++    store.adopt_change(command("CMD-11", 9), {"id": "CHG-2", "changedFields": recovery_change})
++    check("recovery is one assessed change", store.assessment_revision == 10,
++          str(store.assessment_revision))
++
++    for offset, ev_id in enumerate(RECOVERY_EVIDENCE, start=12):
++        store.attach_evidence(command(f"CMD-{offset}", store.assessment_revision), by_id[ev_id])
++    check("six recovery records reach revision 16",
++          store.assessment_revision == 16, str(store.assessment_revision))
++    check("recovery events reach sequence 17", store.sequence == 17, str(store.sequence))
++
+     final = store.assess()
+-    check("recovered plan is ready for review",
+-          final["readiness"] == "ready_for_review",
++    check("recovered plan is ready for review", final["readiness"] == "ready_for_review",
+           str(final["residualReasonCodes"]))
++    check("recovered statuses match O4",
++          statuses(final) == cases["O4"]["requirementStatus"],
++          json.dumps({k: v for k, v in statuses(final).items()
++                      if cases["O4"]["requirementStatus"].get(k) != v}))
+     check("recovered integrated checks pass", final["integrated"]["status"] == "pass")
+     check("photographer evidence unchanged by recovery",
+           next(e for e in store.evidence if e["id"] == "EV-7")["boundFieldVersions"]
+@@ -166,18 +189,22 @@
+ 
+     # ---------------------------------------------------------------- accept 2
+     print("\n6. Second acceptance")
+-    revision_at_recovery = store.assessment_revision
+-    store.record_decision({
+-        "commandId": "CMD-17", "actor": "PM-rowan", "role": "project_manager",
+-        "decisionId": "DEC-2", "expectedAssessmentRevision": revision_at_recovery,
+-    })
++    store.record_decision(command("CMD-18", 16, actor="PM-rowan", decisionId="DEC-2"))
++    check("second decision leaves the revision at 16",
++          store.assessment_revision == 16, str(store.assessment_revision))
++    check("second decision advances the sequence to 18", store.sequence == 18,
++          str(store.sequence))
++    check("final revision equals the oracle's recovered revision",
++          store.assessment_revision == cases["O4"]["assessmentRevision"],
++          f"{store.assessment_revision} vs {cases['O4']['assessmentRevision']}")
++    check("final sequence equals the oracle's last event",
++          store.sequence == cases["O11"]["expected"]["eventSequence"],
++          f"{store.sequence} vs {cases['O11']['expected']['eventSequence']}")
+     check("second decision is current", store.currentness("DEC-2") == "current")
+-    check("second decision targets the recovered revision",
+-          store.latest_decision()["targetAssessmentRevision"] == revision_at_recovery,
+-          str(revision_at_recovery))
+     check("first decision remains historical", store.currentness("DEC-1") == "historical")
+-    check("recording the second decision did not advance the revision",
+-          store.assessment_revision == revision_at_recovery)
++    check("history retains both target revisions",
++          [d["targetAssessmentRevision"] for d in store.export()["decisions"]] == [8, 16],
++          str([d["targetAssessmentRevision"] for d in store.export()["decisions"]]))
+ 
+     # ---------------------------------------------------------------- guard rails
+     print("\n7. Guard rails")
+@@ -195,8 +222,7 @@
+     record_before = json.dumps(store.export(), sort_keys=True)
+     try:
+         store.adopt_change(
+-            {"commandId": "CMD-50", "role": "project_manager",
+-             "expectedAssessmentRevision": revision_before - 1},
++            command("CMD-50", revision_before - 1),
+             {"id": "CHG-X", "changedFields": {"location.capacity": {"from": 140, "to": 141}}},
+         )
+         check("stale write is rejected", False, "no error raised")
+@@ -210,15 +236,34 @@
+           store.snapshot()["location"]["capacity"] == 140,
+           str(store.snapshot()["location"]["capacity"]))
+ 
+-    print("\n8. Export")
++    # ---------------------------------------------------------------- export
++    print("\n8. Export and full reload")
+     export = store.export()
++    assessment_before = store.assess()
+     check("export carries both counters",
+-          export["counters"]["sequence"] == store.sequence
+-          and export["counters"]["assessmentRevision"] == store.assessment_revision)
++          export["counters"]["sequence"] == 18
++          and export["counters"]["assessmentRevision"] == 16,
++          str(export["counters"]))
+     check("export carries both decisions", len(export["decisions"]) == 2)
+-    check("export preserves the historical decision's target revision",
+-          next(d for d in export["decisions"] if d["id"] == "DEC-1")["targetAssessmentRevision"]
+-          < next(d for d in export["decisions"] if d["id"] == "DEC-2")["targetAssessmentRevision"])
++
++    restored = reload_from_export(store)
++    check("export round-trips byte-identically",
++          json.dumps(restored.export(), sort_keys=True) == json.dumps(export, sort_keys=True))
++    check("assessment after reload equals the pre-reload assessment",
++          restored.assess() == assessment_before,
++          "assessment changed across reload")
++    check("reloaded decision is current", restored.currentness("DEC-2") == "current")
++    check("reloaded history keeps the earlier decision historical",
++          restored.currentness("DEC-1") == "historical")
++    check("reloaded record still carries the impact",
++          restored.assess().get("impact") == assessment_before.get("impact"))
++    check("reloaded evidence keeps every review disposition",
++          restored.evidence == store.evidence
++          and all(e["reviewDisposition"] == "accepted" for e in restored.evidence),
++          "evidence changed across reload")
++    check("reloaded evidence keeps its declared types",
++          all(e["type"] == "document" for e in restored.evidence),
++          str(sorted({e["type"] for e in restored.evidence})))
+ 
+     print()
+     if failures:
+@@ -241,7 +286,7 @@
+ 
+ 
+ def diff_state(current: dict, target: dict) -> dict:
+-    """Field-level diff, using the shape the command layer expects."""
++    """Field-level diff, using the shape the change command expects."""
+     now, want = flatten(current), flatten(target)
+     changed = {}
+     for path, value in want.items():
+@@ -254,10 +299,9 @@
+ def reload_from_export(store: Store) -> Store:
+     export = store.export()
+     project = export["project"]
+-    revision = export["counters"]["assessmentRevision"]
+     rebuilt = Store(project, export["requirements"], export["evidence"])
+     rebuilt.sequence = export["counters"]["sequence"]
+-    rebuilt.assessment_revision = revision
++    rebuilt.assessment_revision = export["counters"]["assessmentRevision"]
+     rebuilt.events = export["events"]
+     rebuilt._decisions = {d["id"]: d for d in export["decisions"]}
+     return rebuilt
+diff -ruN a/tools/validate_fixtures.py b/tools/validate_fixtures.py
+--- a/tools/validate_fixtures.py	2026-11-18 16:50:52.413982616 +0000
++++ b/tools/validate_fixtures.py	2026-11-18 16:50:52.415982621 +0000
+@@ -85,6 +85,18 @@
+                 err(f"{ev['id']}: composite digest for {path} matches no state")
+ 
+ 
++def check_evidence_types(scn) -> None:
++    """Every requirement has at least one record of the type it demands."""
++    for req in scn["requirements"]:
++        matching = [
++            e["id"]
++            for e in scn["evidence"]
++            if e["requirementId"] == req["id"] and e["type"] == req["requiredEvidenceType"]
++        ]
++        if not matching:
++            err(f"{req['id']}: no evidence record of type {req['requiredEvidenceType']}")
++
++
+ def check_provenance(scn) -> None:
+     sources = {s["id"]: s for s in scn["sourceReferences"]}
+     for ev in scn["evidence"]:
+@@ -97,12 +109,17 @@
+ 
+ 
+ def check_amounts(scn) -> None:
+-    def amounts(text: str) -> set[int]:
+-        return {int(x.replace(",", "")) for x in re.findall(r"([0-9][0-9,]{2,})", text)}
++    """Every commitment is stated in dollars by a source, in minor units here."""
++
++    def amount_minor_units(text: str) -> set[int]:
++        return {
++            int(match.replace(",", "")) * 100
++            for match in re.findall(r"([0-9][0-9,]*)\s*USD", text)
++        }
+ 
+     sourced: set[int] = set()
+     for src in scn["sourceReferences"]:
+-        sourced |= amounts(src["excerpt"])
++        sourced |= amount_minor_units(src["excerpt"])
+     sourced |= {scn["scenario"]["brief"]["approvedBudget"]["minorUnits"]}
+ 
+     for name, doc in scn["state"].items():
+@@ -247,6 +264,32 @@
+         if exp.get("decisionCurrentness") != "current":
+             err(f"{cid}: decision must read as current immediately after write")
+ 
++    # The recovered revision and decision sequence are consequences of the
++    # timeline, not independently chosen numbers.
++    timeline = oracle["timeline"]
++    o4 = cases["O4"]
++    o11 = cases["O11"]["expected"]
++    last_sequence = max(t["eventSequence"] for t in timeline)
++    last_revision = max(t["assessmentRevision"] for t in timeline)
++    if o4["assessmentRevision"] != last_revision:
++        err(f"O4 assessmentRevision {o4['assessmentRevision']} != timeline {last_revision}")
++    if o4["decisionEligibility"]["targetAssessmentRevision"] != o4["assessmentRevision"]:
++        err("O4 decision target does not equal the recovered revision")
++    if o11["eventSequence"] != last_sequence:
++        err(f"O11 eventSequence {o11['eventSequence']} != timeline {last_sequence}")
++    if o11["assessmentRevision"] != o4["assessmentRevision"]:
++        err("O11 assessmentRevision does not equal the recovered revision")
++    decisions = [t for t in timeline if t["event"] == "decision.recorded"]
++    if len(decisions) != 2:
++        err(f"timeline must record two decisions, found {len(decisions)}")
++    elif decisions[-1]["eventSequence"] != o11["eventSequence"]:
++        err("O11 is not the last recorded decision")
++    if not any(t["event"] == "change.adopted" and "recovered" in t.get("detail", "")
++               for t in timeline):
++        err("timeline adopts no recovered-plan change event")
++    if cases["O2"]["trigger"]["baseAssessmentRevision"] + 1 != cases["O2"]["assessmentRevision"]:
++        err("O2 assessmentRevision does not follow its base revision")
++
+     sequence = [t["eventSequence"] for t in oracle["timeline"]]
+     if sequence != sorted(sequence) or len(sequence) != len(set(sequence)):
+         err("timeline eventSequence not strictly increasing")
+@@ -294,6 +337,7 @@
+         return 1
+ 
+     check_state_digests(scenario)
++    check_evidence_types(scenario)
+     check_provenance(scenario)
+     check_amounts(scenario)
+     check_oracle(scenario, oracle)

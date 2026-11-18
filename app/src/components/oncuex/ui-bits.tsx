@@ -93,15 +93,31 @@ export function Panel({
   );
 }
 
-export function StatusBadge({ status }: { status: RequirementStatus }) {
+export function StatusBadge({
+  status,
+  residualCode,
+}: {
+  status: RequirementStatus;
+  residualCode?: string;
+}) {
   const variant =
     status === "supported"
       ? "success"
-      : status === "blocked"
-        ? "warning"
-        : status === "outdated"
-          ? "info"
-          : "destructive";
+      : status === "missing"
+        ? "secondary"
+        : "warning";
+  const label =
+    status === "supported"
+      ? statusLabel.supported
+      : status === "outdated"
+        ? statusLabel.outdated
+        : status === "missing"
+          ? statusLabel.missing
+          : residualCode === "prerequisite_not_supported"
+            ? "Waiting"
+            : residualCode === "predicate_false"
+              ? "Doesn't line up"
+              : "Needs attention";
   return (
     <Badge variant={variant} className="gap-1.5 font-semibold">
       <span
@@ -109,19 +125,19 @@ export function StatusBadge({ status }: { status: RequirementStatus }) {
           "size-1.5 rounded-full",
           status === "supported" && "bg-success",
           status === "blocked" && "bg-warning",
-          status === "outdated" && "bg-info",
-          status === "missing" && "bg-destructive",
+          status === "outdated" && "bg-warning",
+          status === "missing" && "bg-muted-foreground/60",
         )}
       />
-      {statusLabel[status]}
+      {label}
     </Badge>
   );
 }
 
 export function CurrentnessBadge({ currentness }: { currentness: "current" | "historical" }) {
   return (
-    <Badge variant={currentness === "current" ? "success" : "warning"} className="font-semibold">
-      {currentness === "current" ? "Current" : "Historical"}
+    <Badge variant={currentness === "current" ? "success" : "secondary"} className="font-semibold">
+      {currentness === "current" ? "Still valid" : "Previous"}
     </Badge>
   );
 }

@@ -1,0 +1,719 @@
+diff -ruN a/docs/domain-model.md b/docs/domain-model.md
+--- a/docs/domain-model.md	2026-11-18 17:09:26.584649218 +0000
++++ b/docs/domain-model.md	2026-11-18 17:09:26.586649223 +0000
+@@ -152,6 +152,7 @@
+ | `evidenceSetDigest` | string | |
+ | `integrationReviewResult` | object | `{ status, failedChecks[] }` |
+ | `stateDigest` | string | Digest of assessed field values at acceptance; distinguishes lineage from staleness |
++| `evidenceIds` | string[] | Evidence the decision was based on; withdrawn records stay resolvable through the archive |
+ | `explicitExceptions` | object[] | Each with reason, owner and affected requirement |
+ | `disposition` | enum | `accepted`, `rejected` |
+ | `timestamp` | timestamp | |
+@@ -264,6 +265,20 @@
+ | `unknown_evidence` | Review names an evidence record that does not exist |
+ | `invalid_disposition` | Review disposition is not `pending`, `accepted` or `rejected` |
+ | `invalid_requirement` | A replacement requirement set does not satisfy the canonical schema |
++| `invalid_export` | An imported record fails the export contract |
++
++## Export contract
++
++An export carries `exportVersion: "2.0"` and exactly these sections: `project`, `requirements`, `evidence`, `archivedEvidence`, `events`, `decisions`, `counters`.
++
++- Decisions serialize `evidenceIds`, the records they were based on. The evidence set digest stays a digest; the identifiers are explicit.
++- A scope change does not delete evidence. Withdrawn records move to `archivedEvidence` as `{ evidence, archivedAtSequence, archiveReason, requirementSetVersion }`, so a historical decision remains readable after the record leaves the current set.
++- Import validates the version, every decision field, archive integrity, event sequencing and both counters. A failure rejects the whole record with `invalid_export`; nothing is partially loaded.
++- An evidence id may not be current and archived at once, and an archived id cannot be re-attached.
++
++## Conflicting prerequisites
++
++A prerequisite cycle is reported as `prerequisite_cycle`. A separate condition is a pair of prerequisites whose declared constraints admit no common value: disjoint numeric ranges on the same field, or different exact values for it. The dependent reports `blocked` with `prerequisite_conflict`, naming the field, both prerequisite ids and their constraints. Precedence ambiguity never defaults to `supported`. Time-window prerequisites describe when work happens, not which value a field holds, so they are not compared.
+ 
+ ## Impact computation
+ 
+diff -ruN a/docs/readiness-rules.md b/docs/readiness-rules.md
+--- a/docs/readiness-rules.md	2026-11-18 17:09:26.584649218 +0000
++++ b/docs/readiness-rules.md	2026-11-18 17:09:26.586649223 +0000
+@@ -45,6 +45,12 @@
+ 
+ All five conditions hold only in the `supported` case.
+ 
++## Conflicting prerequisites
++
++Two prerequisites conflict when their declared constraints on the same field admit no common value. The comparison covers numeric ranges (`minimum`, `maximum`, `maximumMinorUnits`) and exact values (`set_equals` and the `reviewed` literal of `attestation_reviewed`). The dependent returns `blocked` with `prerequisite_conflict`, naming the field, both prerequisite ids and the constraints. This is independent of a cycle, which reports `prerequisite_cycle`.
++
++Time-window constraints are not compared: they constrain when work happens rather than the value a field holds, so treating disjoint windows as a contradiction would assert a rule the contract does not state.
++
+ ## Integrated checks
+ 
+ Requirement status is necessary and not sufficient. The six checks are evaluated against current state, independently of evidence currency. A requirement can be `outdated` while its check also fails; both are reported.
+diff -ruN a/docs/verification.md b/docs/verification.md
+--- a/docs/verification.md	2026-11-18 17:09:26.584649218 +0000
++++ b/docs/verification.md	2026-11-18 17:09:26.586649223 +0000
+@@ -14,7 +14,7 @@
+ At the venue-change state each vendor record is individually reviewable, yet five conditions conflict: access ends before setup completes, occupancy is below headcount plus buffer, run of show exceeds the hard stop, the committed total exceeds the budget, and the attestation belongs to the previous venue. `integrated.status` is `fail` listing all six checks — the five failures plus `dependency_closure`, which reports the unmet blocking requirements. Each failure states its conflicting values. Per-requirement status alone must not produce readiness.
+ 
+ **V4 — Ambiguous precedence is blocked, not supported.**
+-Introduce a cycle in `prerequisiteIds`, or two prerequisites that cannot both hold. The affected requirements return `blocked` with the cycle path or the conflicting pair. No optimistic default to `supported`.
++Introduce a cycle in `prerequisiteIds`, or two prerequisites that cannot both hold. The affected requirements return `blocked` with the cycle path or the conflicting pair. No optimistic default to `supported`. A conflicting pair means two prerequisites whose declared numeric ranges or exact values on the same field have no common value; time-window prerequisites are not treated as conflicting.
+ 
+ ## Change and impact
+ 
+diff -ruN a/oncuex/engine.py b/oncuex/engine.py
+--- a/oncuex/engine.py	2026-11-18 17:09:26.584649218 +0000
++++ b/oncuex/engine.py	2026-11-18 17:09:26.586649223 +0000
+@@ -177,6 +177,14 @@
+         statuses[rid] = status
+         residuals[rid] = why
+ 
++    for rid, req in by_id.items():
++        if rid in cycle_paths:
++            continue
++        conflicts = prerequisite_conflicts(req, by_id)
++        if conflicts:
++            statuses[rid] = "blocked"
++            residuals[rid] = conflicts[:1]
++
+     integrated = integrated_checks(snapshot, requirements, statuses)
+     ready = all(
+         statuses[r["id"]] == "supported" for r in requirements if r["blocking"]
+@@ -322,6 +330,79 @@
+     return cycles
+ 
+ 
++def _constraint(req: dict) -> dict | None:
++    """A prerequisite's declared constraint on one field, when one is stated."""
++    kind = req["predicateType"]
++    expected = req.get("expectedValues", {})
++    if kind == "numeric_within":
++        field = expected.get("field")
++        if not field:
++            return None
++        return {
++            "kind": "numeric",
++            "field": field,
++            "low": expected.get("minimum"),
++            "high": expected.get("maximum", expected.get("maximumMinorUnits")),
++        }
++    if kind == "set_equals":
++        field = expected.get("field")
++        if not field:
++            return None
++        return {"kind": "equals", "field": field, "value": expected.get("value")}
++    if kind == "attestation_reviewed":
++        return {
++            "kind": "equals",
++            "field": expected.get("attestationField", "location.fireAttestation"),
++            "value": "reviewed",
++        }
++    return None
++
++
++def _conflict(a: dict, b: dict) -> dict | None:
++    ca, cb = _constraint(a), _constraint(b)
++    if not ca or not cb or ca["field"] != cb["field"]:
++        return None
++    field = ca["field"]
++    pair = [a["id"], b["id"]]
++    if ca["kind"] == "numeric" and cb["kind"] == "numeric":
++        lows = [c["low"] for c in (ca, cb) if c["low"] is not None]
++        highs = [c["high"] for c in (ca, cb) if c["high"] is not None]
++        if lows and highs and max(lows) > min(highs):
++            return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
++        return None
++    if ca["kind"] == "equals" and cb["kind"] == "equals":
++        if ca["value"] != cb["value"]:
++            return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
++        return None
++    numeric, exact = (ca, cb) if ca["kind"] == "numeric" else (cb, ca)
++    value = exact["value"]
++    if not isinstance(value, int):
++        return None
++    below = numeric["low"] is not None and value < numeric["low"]
++    above = numeric["high"] is not None and value > numeric["high"]
++    if below or above:
++        return {"field": field, "prerequisiteIds": pair, "constraints": [ca, cb]}
++    return None
++
++
++def prerequisite_conflicts(req: dict, by_id: dict[str, dict]) -> list[dict]:
++    """Pairs of declared prerequisites that no single value can satisfy.
++
++    Only declared constraints are compared: numeric ranges and exact values on
++    the same field. Time windows constrain when work happens, not what value a
++    field holds, so they are not treated as conflicting.
++    """
++    prerequisites = [by_id[pid] for pid in req["prerequisiteIds"] if pid in by_id]
++    conflicts: list[dict] = []
++    for index, first in enumerate(prerequisites):
++        for second in prerequisites[index + 1:]:
++            conflict = _conflict(first, second)
++            if conflict:
++                conflict["code"] = "prerequisite_conflict"
++                conflicts.append(conflict)
++    return conflicts
++
++
+ def dependent_closure(seeds: set[str], requirements: list[dict]) -> set[str]:
+     """Requirement ids affected by the seeds, following prerequisites downward."""
+     graph = {req["id"]: list(req["prerequisiteIds"]) for req in requirements}
+diff -ruN a/oncuex/schema.py b/oncuex/schema.py
+--- a/oncuex/schema.py	2026-11-18 17:09:26.584649218 +0000
++++ b/oncuex/schema.py	2026-11-18 17:09:26.586649223 +0000
+@@ -839,3 +839,218 @@
+         problems = validate_evidence_record(ev, requirement_ids)
+         if problems:
+             raise SchemaError(problems[0])
++
++
++# ---------------------------------------------------------------- export contract
++EXPORT_VERSION = "2.0"
++
++
++def _validate_decision(decision: dict, evidence_ids: set[str]) -> list[str]:
++    if not isinstance(decision, dict):
++        return ["decision: must be an object"]
++    label = decision.get("id", "<decision>")
++    allowed = {
++        "id",
++        "actor",
++        "role",
++        "targetAssessmentRevision",
++        "requirementSetVersion",
++        "requirementSetDigest",
++        "evidenceSetDigest",
++        "integrationReviewResult",
++        "disposition",
++        "stateDigest",
++        "evidenceIds",
++    }
++    errors = _check_keys(decision, allowed, allowed, str(label))
++    if not (isinstance(decision.get("id"), str) and ID_PATTERNS["decision"].match(decision["id"])):
++        errors.append(f"{label}: id must match DEC-<n>")
++    if decision.get("role") != "project_manager":
++        errors.append(f"{label}: role must be project_manager")
++    if decision.get("disposition") != "accepted":
++        errors.append(f"{label}: disposition must be accepted")
++    for name in ("targetAssessmentRevision", "requirementSetVersion"):
++        if not type_ok("integer", decision.get(name)):
++            errors.append(f"{label}: {name} must be an integer")
++    for name in ("requirementSetDigest", "evidenceSetDigest", "stateDigest"):
++        value = decision.get(name)
++        if not (isinstance(value, str) and DIGEST.match(value)):
++            errors.append(f"{label}: {name} must be a sha256 digest")
++    if not isinstance(decision.get("integrationReviewResult"), dict):
++        errors.append(f"{label}: integrationReviewResult must be an object")
++    ids = decision.get("evidenceIds")
++    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
++        errors.append(f"{label}: evidenceIds must be a list of strings")
++    else:
++        if len(ids) != len(set(ids)):
++            errors.append(f"{label}: duplicate evidenceIds entry")
++        errors += [
++            f"{label}: evidenceIds names unknown record {i}" for i in ids if i not in evidence_ids
++        ]
++        if decision.get("evidenceSetDigest") != digest(ids):
++            errors.append(f"{label}: evidenceSetDigest does not match evidenceIds")
++    return errors
++
++
++def _validate_archive_entry(entry: dict) -> list[str]:
++    if not isinstance(entry, dict):
++        return ["archivedEvidence: entry must be an object"]
++    errors = _check_keys(
++        entry,
++        {"evidence", "archivedAtSequence", "archiveReason", "requirementSetVersion"},
++        {"evidence", "archivedAtSequence", "archiveReason", "requirementSetVersion"},
++        "archivedEvidence",
++    )
++    if not type_ok("integer", entry.get("archivedAtSequence")):
++        errors.append("archivedEvidence: archivedAtSequence must be an integer")
++    if not isinstance(entry.get("archiveReason"), str) or not entry["archiveReason"]:
++        errors.append("archivedEvidence: archiveReason must be a non-empty string")
++    if not type_ok("integer", entry.get("requirementSetVersion")):
++        errors.append("archivedEvidence: requirementSetVersion must be an integer")
++    errors += validate_evidence_record(entry.get("evidence", {}))
++    return errors
++
++
++def validate_export(export: dict) -> list[str]:
++    """Validate the documented export contract before a store accepts it."""
++    if not isinstance(export, dict):
++        return ["export: must be an object"]
++    allowed = {
++        "exportVersion",
++        "project",
++        "requirements",
++        "evidence",
++        "archivedEvidence",
++        "events",
++        "decisions",
++        "counters",
++    }
++    errors = _check_keys(export, allowed, allowed, "export")
++    if export.get("exportVersion") != EXPORT_VERSION:
++        errors.append(
++            f"export: unsupported exportVersion {export.get('exportVersion')!r}; "
++            f"expected {EXPORT_VERSION}"
++        )
++
++    project = export.get("project")
++    requirements = export.get("requirements")
++    evidence = export.get("evidence")
++    if not isinstance(project, dict):
++        errors.append("export.project: must be an object")
++    if not isinstance(requirements, list):
++        errors.append("export.requirements: must be a list")
++    if not isinstance(evidence, list):
++        errors.append("export.evidence: must be a list")
++    if errors and not isinstance(project, dict):
++        return errors
++
++    try:
++        validate_snapshot(project, requirements or [], evidence or [])
++    except SchemaError as exc:
++        errors.append(f"export record: {exc}")
++
++    archived = export.get("archivedEvidence")
++    archived_ids: set[str] = set()
++    if not isinstance(archived, list):
++        errors.append("export.archivedEvidence: must be a list")
++        archived = []
++    else:
++        for entry in archived:
++            errors += _validate_archive_entry(entry)
++            if isinstance(entry, dict) and isinstance(entry.get("evidence"), dict):
++                archived_ids.add(entry["evidence"].get("id"))
++        if len(archived_ids) != len(archived):
++            errors.append("export.archivedEvidence: evidence ids must be unique")
++
++    current_ids = {e.get("id") for e in evidence or [] if isinstance(e, dict)}
++    overlap = current_ids & archived_ids
++    if overlap:
++        errors.append(f"export: evidence ids appear current and archived {sorted(overlap)}")
++
++    decisions = export.get("decisions")
++    if not isinstance(decisions, list):
++        errors.append("export.decisions: must be a list")
++        decisions = []
++    known_evidence = current_ids | archived_ids
++    decision_ids = set()
++    for decision in decisions:
++        errors += _validate_decision(decision, known_evidence)
++        if isinstance(decision, dict):
++            if decision.get("id") in decision_ids:
++                errors.append(f"export.decisions: duplicate id {decision.get('id')}")
++            decision_ids.add(decision.get("id"))
++
++    events = export.get("events")
++    if not isinstance(events, list):
++        errors.append("export.events: must be a list")
++        events = []
++    previous = 0
++    for event in events:
++        if not isinstance(event, dict):
++            errors.append("export.events: entry must be an object")
++            continue
++        errors += _check_keys(
++            event,
++            {
++                "id",
++                "sequence",
++                "commandId",
++                "eventType",
++                "actor",
++                "expectedAssessmentRevision",
++                "resultingAssessmentRevision",
++                "assessedFactsChanged",
++                "payload",
++            },
++            {
++                "id",
++                "sequence",
++                "eventType",
++                "resultingAssessmentRevision",
++                "assessedFactsChanged",
++                "payload",
++            },
++            f"event {event.get('id', '<event>')}",
++        )
++        sequence = event.get("sequence")
++        if not type_ok("integer", sequence) or sequence != previous + 1:
++            errors.append(f"event {event.get('id', '<event>')}: sequence must follow {previous}")
++        previous = sequence if type_ok("integer", sequence) else previous
++        if event.get("eventType") not in EVENT_TYPES:
++            errors.append(f"event {event.get('id', '<event>')}: unknown eventType")
++        if not isinstance(event.get("assessedFactsChanged"), bool):
++            errors.append(f"event {event.get('id', '<event>')}: assessedFactsChanged must be boolean")
++        if not isinstance(event.get("payload"), dict):
++            errors.append(f"event {event.get('id', '<event>')}: payload must be an object")
++
++    counters = export.get("counters")
++    if not isinstance(counters, dict):
++        errors.append("export.counters: must be an object")
++    else:
++        errors += _check_keys(counters, {"sequence", "assessmentRevision"},
++                              {"sequence", "assessmentRevision"}, "export.counters")
++        sequence = counters.get("sequence")
++        revision = counters.get("assessmentRevision")
++        if not type_ok("integer", sequence) or not type_ok("integer", revision):
++            errors.append("export.counters: both counters must be integers")
++        else:
++            if sequence != previous:
++                errors.append("export.counters.sequence does not equal the last event")
++            if revision < 0:
++                errors.append("export.counters.assessmentRevision must not be negative")
++            for decision in decisions:
++                target = decision.get("targetAssessmentRevision") if isinstance(decision, dict) else None
++                if type_ok("integer", target) and target > revision:
++                    errors.append(
++                        f"{decision.get('id')}: targetAssessmentRevision exceeds the export"
++                    )
++            for entry in archived:
++                if not isinstance(entry, dict):
++                    continue
++                archived_at = entry.get("archivedAtSequence")
++                if type_ok("integer", archived_at) and archived_at > sequence:
++                    errors.append(
++                        f"archivedEvidence {entry.get('evidence', {}).get('id')}: "
++                        f"archivedAtSequence exceeds the event sequence"
++                    )
++    return errors
+diff -ruN a/oncuex/store.py b/oncuex/store.py
+--- a/oncuex/store.py	2026-11-18 17:09:26.584649218 +0000
++++ b/oncuex/store.py	2026-11-18 17:09:26.586649223 +0000
+@@ -19,14 +19,17 @@
+ 
+ from .engine import combine_impact, evaluate, impact_of_change, impact_of_expiry
+ from .schema import (
++    EXPORT_VERSION,
+     FIELD_SCHEMA,
+     REVIEW_DISPOSITIONS,
+     TYPED_PATHS,
++    canon,
+     digest,
+     is_expired,
+     validate_brief,
+     validate_evidence_record,
+     validate_requirement,
++    validate_export,
+     value_matches,
+ )
+ 
+@@ -66,6 +69,7 @@
+         self.assessment_revision = self.project.get("assessmentRevision", 1)
+         self._results: dict[str, dict] = {}
+         self._decisions: dict[str, dict] = {}
++        self.archived_evidence: list[dict] = []
+ 
+     # ---------------------------------------------------------------- reads
+     def snapshot(self) -> dict:
+@@ -118,7 +122,7 @@
+         if decision["requirementSetVersion"] != self.project.get("requirementSetVersion", 1):
+             return "historical"
+         now = self.project.get("_now", "1970-01-01T00:00:00Z")
+-        for ev_id in decision["_evidenceIds"]:
++        for ev_id in decision.get("evidenceIds", []):
+             ev = next((e for e in self.evidence if e["id"] == ev_id), None)
+             if ev is None or ev.get("reviewDisposition") != "accepted":
+                 return "historical"
+@@ -150,6 +154,22 @@
+             "currentResidualReasonCodes": self.assess()["residualReasonCodes"],
+         }
+ 
++    def decision_evidence(self, decision_id: str) -> list[dict]:
++        """Evidence a decision was based on, including withdrawn records."""
++        decision = self._decisions.get(decision_id)
++        if decision is None:
++            raise CommandError("unknown_decision", decision_id)
++        archived = {entry["evidence"]["id"]: entry["evidence"]
++                    for entry in self.archived_evidence}
++        records: list[dict] = []
++        for evidence_id in decision.get("evidenceIds", []):
++            record = next((e for e in self.evidence if e["id"] == evidence_id), None)
++            record = record if record is not None else archived.get(evidence_id)
++            if record is None:
++                raise CommandError("unknown_evidence", evidence_id)
++            records.append(copy.deepcopy(record))
++        return records
++
+     def eligibility(self, role: str = "project_manager") -> dict:
+         """Whether acceptance is available now, with the codes that block it."""
+         assessment = self.assess()
+@@ -271,7 +291,9 @@
+         replay = self._begin(command, "evidence.attached")
+         if replay is not None:
+             return replay
+-        if any(e["id"] == evidence["id"] for e in self.evidence):
++        if any(e["id"] == evidence["id"] for e in self.evidence) or any(
++            entry["evidence"]["id"] == evidence["id"] for entry in self.archived_evidence
++        ):
+             raise CommandError("duplicate_evidence", evidence["id"])
+         for path, value in evidence["boundFieldVersions"].items():
+             spec = TYPED_PATHS.get(path)
+@@ -359,12 +381,34 @@
+             problems = validate_requirement(req, requirement_ids)
+             if problems:
+                 raise CommandError("invalid_requirement", problems[0])
++        archived_ids = {entry["evidence"]["id"] for entry in self.archived_evidence}
++        existing = {e["id"]: e for e in self.evidence}
++        for record in evidence:
++            if record["id"] in archived_ids:
++                raise CommandError("duplicate_evidence", record["id"])
++            previous = existing.get(record["id"])
++            if previous is not None and canon(previous) != canon(record):
++                raise CommandError(
++                    "invalid_evidence",
++                    f"{record['id']}: records are immutable; withdraw and attach a new id",
++                )
++
+         for ev in evidence:
+             problems = validate_evidence_record(ev, requirement_ids)
+             if problems:
+                 raise CommandError("invalid_evidence", problems[0])
+ 
+         version = self.project.get("requirementSetVersion", 1) + 1
++        kept_ids = {e["id"] for e in evidence}
++        for record in self.evidence:
++            if record["id"] in kept_ids:
++                continue
++            self.archived_evidence.append({
++                "evidence": copy.deepcopy(record),
++                "archivedAtSequence": self.sequence + 1,
++                "archiveReason": "requirement_set_changed",
++                "requirementSetVersion": version,
++            })
+         self.requirements = copy.deepcopy(requirements)
+         self.evidence = copy.deepcopy(evidence)
+         self.project["requirementSetVersion"] = version
+@@ -407,7 +451,7 @@
+             "integrationReviewResult": assessment["integrated"],
+             "disposition": "accepted",
+             "stateDigest": self._state_digest(),
+-            "_evidenceIds": evidence_ids,
++            "evidenceIds": evidence_ids,
+         }
+         result = self._commit(command, "decision.recorded", {"decisionId": decision_id})
+         self._decisions[decision_id] = decision
+@@ -443,11 +487,15 @@
+ 
+     @classmethod
+     def from_export(cls, export: dict) -> "Store":
+-        """Rebuild a store, including replay results, from an export."""
++        """Rebuild a store, including replay results, from a validated export."""
++        problems = validate_export(export)
++        if problems:
++            raise CommandError("invalid_export", problems[0])
+         store = cls(export["project"], export["requirements"], export["evidence"])
+         store.sequence = export["counters"]["sequence"]
+         store.assessment_revision = export["counters"]["assessmentRevision"]
+         store.events = copy.deepcopy(export["events"])
++        store.archived_evidence = copy.deepcopy(export["archivedEvidence"])
+         store._decisions = {d["id"]: copy.deepcopy(d) for d in export["decisions"]}
+         for event in store.events:
+             command_id = event.get("commandId")
+@@ -465,9 +513,11 @@
+ 
+     def export(self) -> dict:
+         return {
++            "exportVersion": EXPORT_VERSION,
+             "project": self.snapshot(),
+             "requirements": self.requirements,
+             "evidence": self.evidence,
++            "archivedEvidence": self.archived_evidence,
+             "events": self.events,
+             "decisions": list(self._decisions.values()),
+             "counters": {
+diff -ruN a/tools/check_core.py b/tools/check_core.py
+--- a/tools/check_core.py	2026-11-18 17:09:26.585649221 +0000
++++ b/tools/check_core.py	2026-11-18 17:09:26.587649226 +0000
+@@ -235,13 +235,13 @@
+     # ------------------------------------------------------------ reload idempotency
+     replay_store = Store(project_for(scenario, "baseline", 8),
+                          copy.deepcopy(requirements), base_evidence(scenario))
+-    decision_command = command("CMD-RL", 8, actor="PM-rowan", decisionId="DEC-RL")
++    decision_command = command("CMD-RL", 8, actor="PM-rowan", decisionId="DEC-9")
+     replay_store.record_decision(copy.deepcopy(decision_command))
+     restored_store = Store.from_export(replay_store.export())
+     sequence_before = restored_store.sequence
+     replay_result = restored_store.record_decision(copy.deepcopy(decision_command))
+     check("a command replayed after reload returns the stored result",
+-          replay_result.get("decisionId") == "DEC-RL", str(replay_result))
++          replay_result.get("decisionId") == "DEC-9", str(replay_result))
+     check("a command replayed after reload appends nothing",
+           restored_store.sequence == sequence_before, str(restored_store.sequence))
+     check("a command replayed after reload keeps one decision",
+@@ -419,6 +419,174 @@
+               any(c["id"] == "dependency_closure" for c in assessment["integrated"]["checks"]),
+               str([c["id"] for c in assessment["integrated"]["checks"]]))
+ 
++    # ------------------------------------------------------------ archived evidence
++    archive_store = Store(project_for(scenario, "baseline", 8),
++                          copy.deepcopy(requirements), base_evidence(scenario))
++    archive_store.record_decision(command("CMD-AR1", 8, actor="PM-rowan", decisionId="DEC-8"))
++    trimmed_evidence = [copy.deepcopy(e) for e in evidence if e["id"] != "EV-7"]
++    archive_store.change_requirement_set(
++        command("CMD-AR2", 8), trimmed_requirements, trimmed_evidence)
++    check("withdrawn evidence is archived", len(archive_store.archived_evidence) == 1,
++          str(len(archive_store.archived_evidence)))
++    entry = archive_store.archived_evidence[0]
++    check("the archive keeps the record, its sequence and the reason",
++          entry["evidence"]["id"] == "EV-7"
++          and entry["archivedAtSequence"] == 2
++          and entry["archiveReason"] == "requirement_set_changed"
++          and entry["requirementSetVersion"] == 2,
++          json.dumps({k: v for k, v in entry.items() if k != "evidence"}))
++    check("archived evidence leaves the current set",
++          all(e["id"] != "EV-7" for e in archive_store.evidence))
++    snapshots = archive_store.decision_evidence("DEC-8")
++    check("a historical decision's evidence stays readable",
++          [e["id"] for e in snapshots] == [f"EV-{n}" for n in range(1, 8)],
++          str([e["id"] for e in snapshots]))
++    check("the archived snapshot keeps its content digest",
++          snapshots[-1]["contentDigest"]
++          == next(e for e in evidence if e["id"] == "EV-7")["contentDigest"])
++
++    archive_reload = Store.from_export(archive_store.export())
++    check("the archive survives reload",
++          archive_reload.archived_evidence == archive_store.archived_evidence)
++    check("historical evidence is readable after reload",
++          [e["id"] for e in archive_reload.decision_evidence("DEC-8")]
++          == [f"EV-{n}" for n in range(1, 8)])
++    check("the scope-changed decision stays historical after reload",
++          archive_reload.currentness("DEC-8") == "historical")
++    check("export round-trips with the archive",
++          json.dumps(archive_reload.export(), sort_keys=True)
++          == json.dumps(archive_store.export(), sort_keys=True))
++    try:
++        archive_reload.attach_evidence(
++            command("CMD-AR3", 9), next(e for e in evidence if e["id"] == "EV-7"))
++        check("an archived record cannot be re-attached", False, "accepted")
++    except CommandError as exc:
++        check("an archived record cannot be re-attached", exc.code == "duplicate_evidence",
++              exc.code)
++
++    # ------------------------------------------------------------ export contract
++    exported = archive_store.export()
++    check("the export declares its version", exported["exportVersion"] == "2.0",
++          str(exported.get("exportVersion")))
++    check("decisions serialize the documented evidence field",
++          "evidenceIds" in exported["decisions"][0]
++          and "_evidenceIds" not in exported["decisions"][0])
++    check("the export carries the archive",
++          exported["archivedEvidence"][0]["evidence"]["id"] == "EV-7")
++
++    immutable = Store(project_for(scenario, "baseline", 8),
++                      copy.deepcopy(requirements), base_evidence(scenario))
++    record_before = json.dumps(immutable.export(), sort_keys=True)
++    rewritten = [copy.deepcopy(e) for e in evidence]
++    rewritten[0]["sourceExcerpt"] = "A rewritten record that no source states."
++    try:
++        immutable.change_requirement_set(command("CMD-IM1", 8),
++                                         copy.deepcopy(requirements), rewritten)
++        check("scope change cannot rewrite a retained record", False, "accepted")
++    except CommandError as exc:
++        check("scope change cannot rewrite a retained record",
++              exc.code == "invalid_evidence", exc.code)
++    check("a rejected rewrite leaves the record byte-identical",
++          json.dumps(immutable.export(), sort_keys=True) == record_before)
++
++    try:
++        archive_store.change_requirement_set(
++            command("CMD-IM2", 9), trimmed_requirements,
++            trimmed_evidence + [copy.deepcopy(entry["evidence"])])
++        check("a withdrawn record cannot return through a scope change", False, "accepted")
++    except CommandError as exc:
++        check("a withdrawn record cannot return through a scope change",
++              exc.code == "duplicate_evidence", exc.code)
++
++    def rejects(label: str, mutate) -> None:
++        bad = json.loads(json.dumps(exported))
++        mutate(bad)
++        try:
++            Store.from_export(bad)
++            check(label, False, "import accepted")
++        except CommandError as exc:
++            check(label, exc.code == "invalid_export", exc.code)
++
++    rejects("an import without a version is rejected",
++            lambda e: e.pop("exportVersion"))
++    rejects("an unsupported export version is rejected",
++            lambda e: e.__setitem__("exportVersion", "1.0"))
++    rejects("a decision without evidenceIds is rejected",
++            lambda e: e["decisions"][0].pop("evidenceIds"))
++    rejects("a legacy private evidence field is rejected",
++            lambda e: (e["decisions"][0].pop("evidenceIds"),
++                       e["decisions"][0].__setitem__("_evidenceIds", [])))
++    rejects("a malformed archive entry is rejected",
++            lambda e: e["archivedEvidence"][0].pop("archiveReason"))
++    rejects("an archive entry overlapping current evidence is rejected",
++            lambda e: e["archivedEvidence"][0]["evidence"].__setitem__(
++                "id", e["evidence"][0]["id"]))
++    rejects("an event sequence gap is rejected",
++            lambda e: e["events"][0].__setitem__("sequence", 5))
++    rejects("a mismatched decision evidence digest is rejected",
++            lambda e: e["decisions"][0].__setitem__("evidenceSetDigest",
++                                                    "sha256:" + "0" * 64))
++    rejects("an archive sequence beyond the log is rejected",
++            lambda e: e["archivedEvidence"][0].__setitem__("archivedAtSequence", 999))
++    rejects("a decision targeting a future revision is rejected",
++            lambda e: e["decisions"][0].__setitem__("targetAssessmentRevision", 99))
++
++    # ------------------------------------------------------------ conflicting prerequisites
++    conflict_requirements = copy.deepcopy(requirements)
++    by_req = {r["id"]: r for r in conflict_requirements}
++    by_req["REQ-venue-capacity-1"]["expectedValues"] = {
++        "field": "location.capacity", "minimum": 150, "unit": "people"}
++    capped = {
++        "id": "REQ-capped-capacity-1",
++        "version": 1,
++        "milestoneId": "MS-1",
++        "owner": "CON-ana",
++        "label": "Licensed occupancy stays below 120",
++        "predicateType": "numeric_within",
++        "expectedValues": {"field": "location.capacity", "maximum": 120, "unit": "people"},
++        "prerequisiteIds": [],
++        "requiredEvidenceType": "document",
++        "expiryPolicy": {"mode": "absolute", "value": "2027-03-07T00:00:00Z"},
++        "blocking": True,
++        "fieldBindings": ["location.capacity"],
++    }
++    combined = {
++        "id": "REQ-combined-capacity-1",
++        "version": 1,
++        "milestoneId": "MS-1",
++        "owner": "CON-ana",
++        "label": "The room satisfies both occupancy limits",
++        "predicateType": "evidence_present",
++        "expectedValues": {},
++        "prerequisiteIds": ["REQ-venue-capacity-1", "REQ-capped-capacity-1"],
++        "requiredEvidenceType": "document",
++        "expiryPolicy": {"mode": "absolute", "value": "2027-03-07T00:00:00Z"},
++        "blocking": True,
++        "fieldBindings": ["location.capacity"],
++    }
++    conflict_requirements.extend([capped, combined])
++    conflicted = evaluate(project_for(scenario, "baseline", 8),
++                          conflict_requirements, evidence)
++    conflict_status = statuses(conflicted)
++    check("a dependent of conflicting prerequisites is blocked",
++          conflict_status["REQ-combined-capacity-1"] == "blocked",
++          conflict_status["REQ-combined-capacity-1"])
++    conflict_residual = next(
++        r for r in conflicted["requirements"]
++        if r["requirementId"] == "REQ-combined-capacity-1")["residuals"]
++    check("the conflict names the field and both prerequisites",
++          conflict_residual
++          and conflict_residual[0]["code"] == "prerequisite_conflict"
++          and conflict_residual[0]["field"] == "location.capacity"
++          and set(conflict_residual[0]["prerequisiteIds"])
++          == {"REQ-venue-capacity-1", "REQ-capped-capacity-1"},
++          str(conflict_residual))
++    check("conflicting prerequisites do not default to supported",
++          conflict_status["REQ-capped-capacity-1"] != "supported")
++    check("the unmodified scenario reports no prerequisite conflict",
++          not any(r["code"] == "prerequisite_conflict"
++                  for req in baseline["requirements"] for r in req["residuals"]))
++
+     # ------------------------------------------------------------ unaffected stability
+     before_photo = next(r for r in baseline["requirements"]
+                         if r["requirementId"] == "REQ-photographer-deliverables-1")

@@ -1,5 +1,6 @@
 /** Formatting and plain-language labels for the operator screens. */
 
+import { REQUIREMENTS } from "./scenario";
 import type { Residual, RequirementStatus, Role } from "./types";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -87,11 +88,14 @@ export const formatFieldValue = (path: string, value: unknown): string => {
 };
 
 export const statusLabel: Record<RequirementStatus, string> = {
-  supported: "Supported",
-  missing: "Missing evidence",
-  outdated: "Outdated",
-  blocked: "Blocked",
+  supported: "Confirmed",
+  missing: "Not confirmed",
+  outdated: "Needs an update",
+  blocked: "Needs attention",
 };
+
+export const requirementLabel = (id: string): string =>
+  REQUIREMENTS.find((requirement) => requirement.id === id)?.label ?? "Plan item";
 
 export const readinessLabel = (readiness: string): string =>
   readiness === "ready_for_review" ? "Ready for review" : "Not ready";
@@ -101,41 +105,41 @@ export const humanCode = (code: string): string => code.replace(/_/g, " ");
 export const residualText = (residual: Residual): string => {
   switch (residual.code) {
     case "mandatory_evidence_missing":
-      return "No accepted evidence record of the required type supports this requirement.";
+      return "No usable document has been received for this item yet.";
     case "evidence_expired":
-      return `Record ${residual.evidenceId} has passed its expiry date.`;
+      return "The document for this item has expired.";
     case "bound_field_changed":
-      return `Record ${residual.evidenceId} binds ${fieldLabel(String(residual.field))}, which the plan has since changed.`;
+      return "The plan changed after this document was received.";
     case "predicate_false":
-      return "The current plan values do not satisfy this requirement's predicate.";
-    case "prerequisite_not_supported":
-      return `Upstream requirement${(residual.prerequisiteIds ?? []).length === 1 ? "" : "s"} not supported: ${(residual.prerequisiteIds ?? []).join(", ")}.`;
+      return "The current plan values do not meet this item.";
+    case "prerequisite_not_supported": {
+      const names = (residual.prerequisiteIds ?? []).map(requirementLabel);
+      return `Waiting on ${names.join(", ")}.`;
+    }
     case "prerequisite_cycle":
-      return `Prerequisite cycle: ${(residual.path ?? []).join(" → ")}.`;
+      return "The dependencies form a loop; this needs a decision.";
     case "prerequisite_conflict":
-      return `Declared prerequisites disagree on ${fieldLabel(String(residual.field))}; no single value satisfies both.`;
+      return `Two dependencies disagree about ${fieldLabel(String(residual.field))}; this needs a decision.`;
     default:
-      return humanCode(residual.code);
+      return "This item needs attention.";
   }
 };
 
 export const eligibilityText: Record<string, string> = {
-  role_denied: "The selected simulated role is not permitted to accept.",
-  mandatory_requirements_not_supported: "At least one blocking requirement is not supported.",
-  mandatory_evidence_expired: "An accepted evidence record has expired.",
-  integration_failed: "An integrated check fails.",
-  requirement_set_changed: "The requirement set has changed since the last acceptance.",
-  revision_lineage_changed:
-    "Plan values may match an earlier state, but the assessed lineage has moved.",
-  stale_revision: "The plan changed after the last acceptance.",
+  role_denied: "Only the event lead can sign off this plan.",
+  mandatory_requirements_not_supported: "Some checklist items still need attention.",
+  mandatory_evidence_expired: "A document this plan relies on has expired.",
+  integration_failed: "A few details do not fit together yet.",
+  requirement_set_changed: "The scope changed after the last sign-off.",
+  revision_lineage_changed: "The plan has moved since the last sign-off.",
+  stale_revision: "The plan changed after the last sign-off.",
 };
 
 export const decisionReasonText: Record<string, string> = {
-  stale_decision: "The plan facts moved after this acceptance, so it is kept as history.",
-  revision_lineage_changed:
-    "Values may look familiar, but this acceptance was written against a different lineage.",
-  requirement_set_changed: "The requirement set changed after this acceptance.",
-  mandatory_evidence_expired: "Evidence this acceptance relied on has expired.",
+  stale_decision: "The plan changed after this sign-off.",
+  revision_lineage_changed: "The plan has moved since this sign-off.",
+  requirement_set_changed: "The scope changed after this sign-off.",
+  mandatory_evidence_expired: "A document this sign-off relied on has expired.",
 };
 
 export const roleLabel = (role: Role): string =>

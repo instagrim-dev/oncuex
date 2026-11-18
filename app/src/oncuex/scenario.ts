@@ -60,6 +60,8 @@ export const SOURCE_BY_ID = new Map(SOURCES.map((source) => [source.id, source])
 
 export const DEFAULT_NOW = "2027-02-25T00:00:00Z";
 
+export const SAMPLE_BRIEF_TEXT = `Northwind Provisions is planning a spring product launch reception for 120 guests on 14 March 2027. The approved budget ceiling is $30,000. The date is fixed. The venue is not yet final. The client asks for 120 edited photographs delivered within 10 days. Open questions: does the venue provide a freight lift for the 1.2 m scenic panels, and is the photograph delivery date a hard requirement or a preference?`;
+
 export const CLOCK_PRESETS = [
   {
     id: "planning",
@@ -230,6 +232,14 @@ export const UNSOURCED_NOTES: Record<string, string> = {
 
 export const RECOVERY_EVIDENCE_IDS = ["EV-8", "EV-9", "EV-10", "EV-11", "EV-12", "EV-13"];
 export const BASELINE_EVIDENCE_IDS = ["EV-1", "EV-2", "EV-3", "EV-4", "EV-5", "EV-6", "EV-7"];
+
+export function sourceAttribution(record: EvidenceRecord): string {
+  const sources = record.sourceRefIds
+    .map((id) => SOURCE_BY_ID.get(id))
+    .filter((source): source is SourceReference => Boolean(source));
+  if (!sources.length) return "Source";
+  return sources.map((source) => source.attribution).join(" · ");
+}
 
 export function evidenceById(id: string): EvidenceRecord {
   const record = EVIDENCE.find((candidate) => candidate.id === id);
