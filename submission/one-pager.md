@@ -1,7 +1,7 @@
 # OnCueX — event readiness that keeps approval tied to its evidence
 
 **Team 17 · OnCueX (Northwind Provisions) · Converge.AI Stanford 30×30 Buildathon**
-**Prototype:** d606ece3407d419a80272571af62bfd2.prod.enter.pro · **Video (3 min):** youtu.be/4r6gBrXQnpM
+**Prototype:** d606ece3407d419a80272571af62bfd2.prod.enter.pro · **Video (2:59):** youtu.be/4r6gBrXQnpM
 
 ## The problem
 

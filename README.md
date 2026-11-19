@@ -3,11 +3,11 @@
 Event readiness that keeps approval tied to the evidence that supports it.
 
 **Live app:** <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro>
-**Demo video:** <https://youtu.be/4r6gBrXQnpM> — 3 min 17 s walkthrough of the deployed app
+**Demo video:** <https://youtu.be/4r6gBrXQnpM> — 2 min 59 s walkthrough of the deployed app
 
 [![Watch the walkthrough](submission/screenshots/video-poster.jpg)](https://youtu.be/4r6gBrXQnpM)
 
-The walkthrough shows the deployed app: the launch at a glance, a venue move that reopens six commitments while leaving the photographer deliverable valid, and the sign-off that becomes history rather than current acceptance.
+The walkthrough shows the deployed app: the launch at a glance, a venue move that reopens six commitments while leaving the photographer deliverable valid, and the sign-off that becomes history rather than current acceptance. The captioned cut is committed as [submission/oncuex-demo-179s.mp4](submission/oncuex-demo-179s.mp4) with captions in [submission/oncuex-demo.srt](submission/oncuex-demo.srt).
 
 A launch plan is not ready because its tasks are checked off. It is ready when every mandatory requirement has current, attributable support, when the workstreams fit together, and when a project manager accepts that exact state. OnCueX maintains that distinction through a change: when a venue moves, it identifies precisely which commitments the move invalidates, keeps the evidence that never depended on the venue, and refuses to treat an earlier approval as current.
 
@@ -121,7 +121,8 @@ The app is a port, so the two engine behaviours most easily lost in a port are p
 | [submission/overview.md](submission/overview.md) | One-page description of the problem, the mechanism and the limits. |
 | [submission/packet.md](submission/packet.md) | Submission packet: entry details, artifacts, verification, limitations. |
 | [submission/oncuex-one-pager.pdf](submission/oncuex-one-pager.pdf) | The required one-pager: problem, solution, build, results, pilot path. |
-| [submission/oncuex-demo.pptx](submission/oncuex-demo.pptx) | The demo deck, 16 native PowerPoint slides with screenshots and speaker notes. |
+| [submission/oncuex-demo-179s.mp4](submission/oncuex-demo-179s.mp4) | The demo video, cut to 2 min 59 s to fit the 3-minute limit; captions in [oncuex-demo.srt](submission/oncuex-demo.srt). |
+| [submission/oncuex-demo.pptx](submission/oncuex-demo.pptx) | The demo deck, 14 native PowerPoint slides with screenshots and speaker notes. |
 | [submission/demo-slides.html](submission/demo-slides.html) | The same argument as a browser deck, no external assets. |
 | [submission/screenshots/](submission/screenshots/) | Six captures from the live deployment. |
 | [tools/build_deck.py](tools/build_deck.py) | Regenerates the deck from source. |

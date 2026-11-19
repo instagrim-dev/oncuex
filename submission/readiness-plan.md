@@ -64,7 +64,7 @@ Anon keys are public by design and row-level security is the boundary, so this i
 | App typecheck, lint, production build | Clean |
 | App self-check | 33/33 |
 | App source review | 39/39 |
-| Demo deck | 16 native PPTX slides with six live screenshots, rendered and inspected |
+| Demo deck | 14 native PPTX slides with six live screenshots, rendered and inspected |
 | Live deployment | Reachable, interactive, no console errors |
 
 ## Sequence for the remaining window

@@ -11,7 +11,7 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Event | OnCueX challenge, Converge AI Stanford |
 | Submission | OnCueX — event readiness that keeps approval tied to its evidence |
 | Live application | <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro> |
-| Demo video | <https://youtu.be/4r6gBrXQnpM> — 3 min 17 s, viewable without an account |
+| Demo video | <https://youtu.be/4r6gBrXQnpM> — 2 min 59 s upload; see [Before transmitting](#before-transmitting) |
 | Source repository | <https://github.com/instagrim-dev/oncuex> |
 | Required platform | Enter (Converge.AI) — satisfied; the app is built and published on Enter |
 | Demo Day | 20 November 2026 |
@@ -22,8 +22,8 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Artifact | Path | State |
 | --- | --- | --- |
 | Live application | the URL above | Reachable, renders, interactive |
-| Demo video | youtu.be/4r6gBrXQnpM | Reachable; public title, description and duration confirmed |
-| Demo deck (PowerPoint) | [oncuex-demo.pptx](oncuex-demo.pptx) | 16 slides, native shapes, speaker notes |
+| Demo video | [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) → youtu.be/4r6gBrXQnpM | 2 min 59 s, 1080p30, H.264/AAC, captions included |
+| Demo deck (PowerPoint) | [oncuex-demo.pptx](oncuex-demo.pptx) | 14 slides, native shapes, speaker notes |
 | Demo deck (HTML) | [demo-slides.html](demo-slides.html) | Same argument, browser-native, no assets |
 | One-page overview | [overview.md](overview.md) | Written for the shipped product |
 | Product screenshots | [screenshots/](screenshots/) | Six, from the live deployment |
@@ -55,7 +55,7 @@ Steps 3 and 4 are the product's claim. If they behave as described, the claim ho
 | Tab interaction | clicked each tab | all five switch |
 | Venue change | drove it in the browser | six requirements reopened |
 | Sign-off dialog | opened it | names open client questions |
-| Deck renders | LibreOffice → PDF → rasterise | 16 pages, no overflow |
+| Deck renders | LibreOffice → PDF → rasterise | 14 pages, no overflow |
 | Deck geometry | shape bounds inspection | no shape off-slide |
 | Reference suites | executed | 0 / 95 / 102 / 40, end-to-end passes |
 | App harnesses | executed | 33 / 33 and 39 / 39 |
@@ -70,7 +70,9 @@ Steps 3 and 4 are the product's claim. If they behave as described, the claim ho
 
 ## Before transmitting
 
-- [ ] Open the video and skim it — 3 min 17 s, and it should match what you narrate
+- [ ] Replace the YouTube upload with [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) — the current upload is still the 3:17 cut, and the brief caps the video at 3:00
+- [ ] After re-upload, turn on YouTube's automatic captions and paste [oncuex-demo.srt](oncuex-demo.srt) if they need correcting; the audio was re-timed, so the old captions no longer align
+- [ ] Open the video and skim it — 2 min 59 s, and it should match what you narrate
 - [ ] Open the live URL and confirm it loads in your own browser
 - [ ] Confirm the deck opens in the presentation software you will use — fonts are Georgia and Courier New, both standard
 - [ ] Confirm the deadline: the event page states Nov 18, 5:00 PM PT

@@ -1,0 +1,187 @@
+1
+00:00:00,000 --> 00:00:05,200
+Event delivery is complex, and the biggest risk isn't change itself.
+
+2
+00:00:05,200 --> 00:00:08,700
+It's losing track of what that change actually breaks.
+
+3
+00:00:08,700 --> 00:00:13,200
+Here is a solution for OnCueX, built on Converge.AI.
+
+4
+00:00:13,200 --> 00:00:16,600
+OnCueX manages high-stakes innovation events,
+
+5
+00:00:16,600 --> 00:00:20,100
+but their core team struggles with fragmented information
+
+6
+00:00:20,100 --> 00:00:22,500
+hidden in emails and spreadsheets.
+
+7
+00:00:22,500 --> 00:00:28,100
+They need a scalable, consistent way to handle changes without accidental oversights.
+
+8
+00:00:28,300 --> 00:00:31,700
+When a venue moves, the plan often looks correct on the surface
+
+9
+00:00:31,700 --> 00:00:34,700
+while critical dependencies fail silently.
+
+10
+00:00:34,700 --> 00:00:39,600
+OnCueX needs to know exactly which commitments remain supported and which do not,
+
+11
+00:00:39,600 --> 00:00:41,500
+before making promises.
+
+12
+00:00:41,500 --> 00:00:43,300
+Compare the two workflows.
+
+13
+00:00:43,300 --> 00:00:48,800
+Currently, a venue change requires manual, error-prone rechecks by the whole team.
+
+14
+00:00:48,800 --> 00:00:52,700
+Our approach turns that process into a single reviewed command
+
+15
+00:00:52,700 --> 00:00:56,000
+that instantly flags only affected commitments.
+
+16
+00:00:56,000 --> 00:00:59,600
+By computing impact based on specific dependencies,
+
+17
+00:00:59,600 --> 00:01:03,400
+unrelated work remains untouched and verified.
+
+18
+00:01:03,400 --> 00:01:06,200
+Notice how the photography commitment stays green
+
+19
+00:01:06,200 --> 00:01:10,400
+while other impacted items clearly show they need a revisit.
+
+20
+00:01:10,400 --> 00:01:13,200
+We don't use abstract status scores.
+
+21
+00:01:13,200 --> 00:01:16,700
+The system provides a clear, narrative view of the conflict,
+
+22
+00:01:16,700 --> 00:01:20,400
+the reason it exists, and the specific fix required,
+
+23
+00:01:20,400 --> 00:01:23,700
+allowing producers to recheck the plan with one click.
+
+24
+00:01:23,700 --> 00:01:27,100
+The system never automatically approves anything.
+
+25
+00:01:27,100 --> 00:01:33,200
+Readiness is computed, but acceptance is a deliberate, recorded act by a human lead,
+
+26
+00:01:33,200 --> 00:01:36,600
+ensuring accountability for every revision of the plan.
+
+27
+00:01:36,600 --> 00:01:40,300
+We separate passing comments from formal commands,
+
+28
+00:01:40,300 --> 00:01:44,600
+ensuring that only deliberate changes trigger a plan reassessment.
+
+29
+00:01:44,600 --> 00:01:46,900
+The AI is strictly bounded.
+
+30
+00:01:46,900 --> 00:01:49,700
+It reads the brief and drafts requirements,
+
+31
+00:01:49,700 --> 00:01:53,400
+but it has no code path to alter the plan itself.
+
+32
+00:01:53,400 --> 00:01:58,600
+It invents nothing and leaves unknowns clearly marked for human resolution.
+
+33
+00:01:58,600 --> 00:02:02,500
+The impact is real, faster, more reliable planning,
+
+34
+00:02:02,500 --> 00:02:08,600
+predictable delivery within budget, and operational clarity that survives staff turnover.
+
+35
+00:02:08,600 --> 00:02:11,600
+Note, however, that these are early observations,
+
+36
+00:02:11,600 --> 00:02:14,400
+not yet benchmarked against historic data.
+
+37
+00:02:14,400 --> 00:02:17,600
+Our architecture fits their workflow by design.
+
+38
+00:02:17,600 --> 00:02:22,800
+Read-only imports, authenticated roles, and a tunable dependency graph.
+
+39
+00:02:22,800 --> 00:02:28,200
+We validate these improvements through real projects before claiming broad capacity gains.
+
+40
+00:02:28,200 --> 00:02:32,600
+This is a deployed live application, not a laptop prototype.
+
+41
+00:02:32,600 --> 00:02:36,900
+You can explore the full event management tabs, test the persistence,
+
+42
+00:02:36,900 --> 00:02:40,600
+and see the validated model calls for yourself at the provided address.
+
+43
+00:02:40,600 --> 00:02:45,200
+The model does not make final decisions or verify real-world permits.
+
+44
+00:02:45,200 --> 00:02:47,300
+Safety remains in human hands.
+
+45
+00:02:47,300 --> 00:02:51,200
+Plans change, but your record should always notice.
+
+46
+00:02:51,200 --> 00:02:56,000
+Readiness is computed from evidence and sign-offs are held by the lead.
+
+47
+00:02:56,000 --> 00:02:59,000
+We invite you to explore the source and the live app.
