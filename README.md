@@ -1,8 +1,11 @@
 # OnCueX
 
-**Live app:** <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro>
-
 Event readiness that keeps approval tied to the evidence that supports it.
+
+**Live app:** <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro>
+**Demo video:** <https://youtu.be/4r6gBrXQnpM>
+
+The walkthrough shows the deployed app: the launch at a glance, a venue move that reopens six commitments while leaving the photographer deliverable valid, and the sign-off that becomes history rather than current acceptance.
 
 A launch plan is not ready because its tasks are checked off. It is ready when every mandatory requirement has current, attributable support, when the workstreams fit together, and when a project manager accepts that exact state. OnCueX maintains that distinction through a change: when a venue moves, it identifies precisely which commitments the move invalidates, keeps the evidence that never depended on the venue, and refuses to treat an earlier approval as current.
 
