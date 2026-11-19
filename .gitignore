@@ -25,6 +25,7 @@ __pycache__/
 __pycache__/
 *.pyc
 *.pdf
+!submission/oncuex-one-pager.pdf
 
 # Office lock files
 ~$*

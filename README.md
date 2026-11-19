@@ -120,6 +120,7 @@ The app is a port, so the two engine behaviours most easily lost in a port are p
 | [tools/validate_fixtures.py](tools/validate_fixtures.py) | Mechanical enforcement of the schema, binding, evidence and oracle rules. |
 | [submission/overview.md](submission/overview.md) | One-page description of the problem, the mechanism and the limits. |
 | [submission/packet.md](submission/packet.md) | Submission packet: entry details, artifacts, verification, limitations. |
+| [submission/oncuex-one-pager.pdf](submission/oncuex-one-pager.pdf) | The required one-pager: problem, solution, build, results, pilot path. |
 | [submission/oncuex-demo.pptx](submission/oncuex-demo.pptx) | The demo deck, 16 native PowerPoint slides with screenshots and speaker notes. |
 | [submission/demo-slides.html](submission/demo-slides.html) | The same argument as a browser deck, no external assets. |
 | [submission/screenshots/](submission/screenshots/) | Six captures from the live deployment. |
