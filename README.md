@@ -3,7 +3,9 @@
 Event readiness that keeps approval tied to the evidence that supports it.
 
 **Live app:** <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro>
-**Demo video:** <https://youtu.be/4r6gBrXQnpM>
+**Demo video:** <https://youtu.be/4r6gBrXQnpM> — 3 min 17 s walkthrough of the deployed app
+
+[![Watch the walkthrough](submission/screenshots/video-poster.jpg)](https://youtu.be/4r6gBrXQnpM)
 
 The walkthrough shows the deployed app: the launch at a glance, a venue move that reopens six commitments while leaving the photographer deliverable valid, and the sign-off that becomes history rather than current acceptance.
 

@@ -11,7 +11,7 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Event | OnCueX challenge, Converge AI Stanford |
 | Submission | OnCueX — event readiness that keeps approval tied to its evidence |
 | Live application | <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro> |
-| Demo video | <https://youtu.be/4r6gBrXQnpM> — **currently private on YouTube; must be set to unlisted or public before submission** |
+| Demo video | <https://youtu.be/4r6gBrXQnpM> — 3 min 17 s, viewable without an account |
 | Source repository | <https://github.com/instagrim-dev/oncuex> |
 | Required platform | Enter (Converge.AI) — satisfied; the app is built and published on Enter |
 | Demo Day | 20 November 2026 |
@@ -22,7 +22,7 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Artifact | Path | State |
 | --- | --- | --- |
 | Live application | the URL above | Reachable, renders, interactive |
-| Demo video | youtu.be/4r6gBrXQnpM | **Private — not viewable by a judge until visibility changes** |
+| Demo video | youtu.be/4r6gBrXQnpM | Reachable; public title, description and duration confirmed |
 | Demo deck (PowerPoint) | [oncuex-demo.pptx](oncuex-demo.pptx) | 16 slides, native shapes, speaker notes |
 | Demo deck (HTML) | [demo-slides.html](demo-slides.html) | Same argument, browser-native, no assets |
 | One-page overview | [overview.md](overview.md) | Written for the shipped product |
@@ -70,7 +70,7 @@ Steps 3 and 4 are the product's claim. If they behave as described, the claim ho
 
 ## Before transmitting
 
-- [ ] **Set the demo video to unlisted or public** — it is private now, so judges cannot open it
+- [ ] Open the video and skim it — 3 min 17 s, and it should match what you narrate
 - [ ] Open the live URL and confirm it loads in your own browser
 - [ ] Confirm the deck opens in the presentation software you will use — fonts are Georgia and Courier New, both standard
 - [ ] Confirm the deadline: the event page states Nov 18, 5:00 PM PT
