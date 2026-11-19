@@ -3,9 +3,9 @@
 Event readiness that keeps approval tied to the evidence that supports it.
 
 **Live app:** <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro>
-**Demo video:** <https://youtu.be/4r6gBrXQnpM> — 2 min 59 s walkthrough of the deployed app
+**Demo video:** <https://youtu.be/ag8mpjeWvGY> — 2 min 59 s walkthrough of the deployed app
 
-[![Watch the walkthrough](submission/screenshots/video-poster.jpg)](https://youtu.be/4r6gBrXQnpM)
+[![Watch the walkthrough](submission/screenshots/video-poster.jpg)](https://youtu.be/ag8mpjeWvGY)
 
 The walkthrough shows the deployed app: the launch at a glance, a venue move that reopens six commitments while leaving the photographer deliverable valid, and the sign-off that becomes history rather than current acceptance. The captioned cut is committed as [submission/oncuex-demo-179s.mp4](submission/oncuex-demo-179s.mp4) with captions in [submission/oncuex-demo.srt](submission/oncuex-demo.srt).
 

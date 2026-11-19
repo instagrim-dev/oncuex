@@ -11,7 +11,7 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Event | OnCueX challenge, Converge AI Stanford |
 | Submission | OnCueX — event readiness that keeps approval tied to its evidence |
 | Live application | <https://d606ece3407d419a80272571af62bfd2.prod.enter.pro> |
-| Demo video | <https://youtu.be/4r6gBrXQnpM> — 2 min 59 s upload; see [Before transmitting](#before-transmitting) |
+| Demo video | <https://youtu.be/ag8mpjeWvGY> — 2 min 59 s, unlisted, no account needed |
 | Source repository | <https://github.com/instagrim-dev/oncuex> |
 | Required platform | Enter (Converge.AI) — satisfied; the app is built and published on Enter |
 | Demo Day | 20 November 2026 |
@@ -22,7 +22,7 @@ Everything an organizer or judge needs, in the order they would look for it.
 | Artifact | Path | State |
 | --- | --- | --- |
 | Live application | the URL above | Reachable, renders, interactive |
-| Demo video | [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) → youtu.be/4r6gBrXQnpM | 2 min 59 s, 1080p30, H.264/AAC, captions included |
+| Demo video | [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) → youtu.be/ag8mpjeWvGY | 2 min 59 s, 1080p30, H.264/AAC; captions in [oncuex-demo.srt](oncuex-demo.srt) |
 | Demo deck (PowerPoint) | [oncuex-demo.pptx](oncuex-demo.pptx) | 14 slides, native shapes, speaker notes |
 | Demo deck (HTML) | [demo-slides.html](demo-slides.html) | Same argument, browser-native, no assets |
 | One-page overview | [overview.md](overview.md) | Written for the shipped product |
@@ -70,12 +70,12 @@ Steps 3 and 4 are the product's claim. If they behave as described, the claim ho
 
 ## Before transmitting
 
-- [ ] Replace the YouTube upload with [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) — the current upload is still the 3:17 cut, and the brief caps the video at 3:00
-- [ ] After re-upload, turn on YouTube's automatic captions and paste [oncuex-demo.srt](oncuex-demo.srt) if they need correcting; the audio was re-timed, so the old captions no longer align
+- [x] Video replaced with [oncuex-demo-179s.mp4](oncuex-demo-179s.mp4) — upload is 2:59, unlisted, no account needed
+- [ ] Add captions — optional, the rules do not require them; the upload has none, and [oncuex-demo.srt](oncuex-demo.srt) is ready to paste in Studio under Subtitles
 - [ ] Open the video and skim it — 2 min 59 s, and it should match what you narrate
 - [ ] Open the live URL and confirm it loads in your own browser
 - [ ] Confirm the deck opens in the presentation software you will use — fonts are Georgia and Courier New, both standard
-- [ ] Confirm the deadline: the event page states Nov 18, 5:00 PM PT
+- [ ] Confirm the deadline: the brief and the form both state Nov 18, 11:59 PM PT — the event page's 5:00 PM is the outdated one
 - [ ] Decide the Supabase anon key question — see [readiness-plan.md](readiness-plan.md)
 - [ ] Record the actual submission channel, time and any receipt below
 
